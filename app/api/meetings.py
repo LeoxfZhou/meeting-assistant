@@ -7,6 +7,8 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.security import CurrentUser
+from app.services.access import meeting_query, require_meeting
 from app.db.session import get_session
 from app.models.meeting import Meeting
 from app.schemas.meeting import MAX_FILE_BYTES, MeetingCreate, MeetingPatch, MeetingRead
@@ -15,15 +17,8 @@ router = APIRouter(prefix="/meetings", tags=["meetings"])
 DB = Annotated[Session, Depends(get_session)]
 
 
-def find_meeting(meeting_id: UUID, session: Session) -> Meeting:
-    meeting = session.get(Meeting, meeting_id)
-    if meeting is None:
-        raise HTTPException(404, "Meeting not found")
-    return meeting
-
-
-def save_meeting(payload: MeetingCreate, source_type: str, session: Session) -> Meeting:
-    meeting = Meeting(**payload.model_dump(), source_type=source_type)
+def save_meeting(payload: MeetingCreate, source_type: str, session: Session, creator_user_id: UUID) -> Meeting:
+    meeting = Meeting(**payload.model_dump(), source_type=source_type, creator_user_id=creator_user_id)
     session.add(meeting)
     session.commit()
     session.refresh(meeting)
@@ -31,20 +26,20 @@ def save_meeting(payload: MeetingCreate, source_type: str, session: Session) -> 
 
 
 @router.post("", response_model=MeetingRead, status_code=201)
-def create_meeting(payload: MeetingCreate, session: DB) -> Meeting:
-    return save_meeting(payload, "pasted_text", session)
+def create_meeting(payload: MeetingCreate, session: DB, user: CurrentUser) -> Meeting:
+    return save_meeting(payload, "pasted_text", session, user.id)
 
 
 @router.get("", response_model=list[MeetingRead])
-def list_meetings(session: DB, limit: Annotated[int, Query(ge=1, le=100)] = 20,
+def list_meetings(session: DB, user: CurrentUser, limit: Annotated[int, Query(ge=1, le=100)] = 20,
                   offset: Annotated[int, Query(ge=0)] = 0) -> list[Meeting]:
-    return list(session.scalars(select(Meeting).order_by(Meeting.created_at.desc(), Meeting.id)
+    return list(session.scalars(meeting_query(user).order_by(Meeting.created_at.desc(), Meeting.id)
                                 .offset(offset).limit(limit)))
 
 
 # 静态 upload 路由放在 UUID 动态路由之前。
 @router.post("/upload", response_model=MeetingRead, status_code=201)
-def upload_meeting(session: DB, file: Annotated[UploadFile, File()],
+def upload_meeting(session: DB, user: CurrentUser, file: Annotated[UploadFile, File()],
                    title: Annotated[str | None, Form()] = None) -> Meeting:
     try:
         name = PurePosixPath((file.filename or "").replace("\\", "/")).name
@@ -67,19 +62,19 @@ def upload_meeting(session: DB, file: Annotated[UploadFile, File()],
                                     content=content)
         except ValidationError as exc:
             raise HTTPException(422, "Meeting title or content is empty, too long, or invalid") from exc
-        return save_meeting(payload, "txt" if suffix == ".txt" else "markdown", session)
+        return save_meeting(payload, "txt" if suffix == ".txt" else "markdown", session, user.id)
     finally:
         file.file.close()
 
 
 @router.get("/{meeting_id}", response_model=MeetingRead)
-def get_meeting(meeting_id: UUID, session: DB) -> Meeting:
-    return find_meeting(meeting_id, session)
+def get_meeting(meeting_id: UUID, session: DB, user: CurrentUser) -> Meeting:
+    return require_meeting(session, meeting_id, user)
 
 
 @router.patch("/{meeting_id}", response_model=MeetingRead)
-def patch_meeting(meeting_id: UUID, payload: MeetingPatch, session: DB) -> Meeting:
-    meeting = find_meeting(meeting_id, session)
+def patch_meeting(meeting_id: UUID, payload: MeetingPatch, session: DB, user: CurrentUser) -> Meeting:
+    meeting = require_meeting(session, meeting_id, user)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(meeting, field, value)
     session.commit()
@@ -88,7 +83,7 @@ def patch_meeting(meeting_id: UUID, payload: MeetingPatch, session: DB) -> Meeti
 
 
 @router.delete("/{meeting_id}", status_code=204)
-def delete_meeting(meeting_id: UUID, session: DB) -> Response:
-    session.delete(find_meeting(meeting_id, session))
+def delete_meeting(meeting_id: UUID, session: DB, user: CurrentUser) -> Response:
+    session.delete(require_meeting(session, meeting_id, user))
     session.commit()
     return Response(status_code=204)

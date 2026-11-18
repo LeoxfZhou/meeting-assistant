@@ -41,6 +41,7 @@ class MeetingRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    creator_user_id: UUID | None
     title: str
     content: str
     source_type: Literal["pasted_text", "txt", "markdown"]

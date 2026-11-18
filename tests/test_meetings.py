@@ -126,10 +126,10 @@ def test_database_failure(client, caplog):
 def test_postgres_schema_and_migration(database_url):
     engine = build_engine(database_url)
     try:
-        assert set(inspect(engine).get_table_names()) == {"meetings", "alembic_version"}
+        assert set(inspect(engine).get_table_names()) == {"meetings", "users", "alembic_version"}
         with engine.connect() as conn:
             assert conn.scalar(text("SELECT version()" )).startswith("PostgreSQL")
-            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0001_create_meetings"
+            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0002_auth"
         cfg = Config("alembic.ini")
         cfg.attributes["database_url"] = database_url
         command.check(cfg)
@@ -139,11 +139,15 @@ def test_postgres_schema_and_migration(database_url):
 
 def test_real_commit_persists_between_sessions(database_url):
     # 不使用测试 savepoint，验证跨连接持久化；只写临时测试数据库。
-    settings = Settings(_env_file=None, app_env="test", database_url=database_url)
+    settings = Settings(_env_file=None, app_env="test", database_url=database_url, jwt_secret="test-only-" * 8)
     with TestClient(create_app(settings)) as first:
+        from tests.helpers import authenticate
+        authenticate(first)
+        authorization = first.headers["Authorization"]
         response = first.post("/meetings", json=PAYLOAD)
         assert response.status_code == 201
         mid = response.json()["id"]
     with TestClient(create_app(settings)) as second:
+        second.headers["Authorization"] = authorization
         assert second.get(f"/meetings/{mid}").json()["content"] == PAYLOAD["content"]
         assert second.delete(f"/meetings/{mid}").status_code == 204

@@ -112,3 +112,9 @@ Batch 1 已实现数据库连接超时、请求 Session 回收/异常回滚、50
 “项目完成了 442 场会议的数据审计，以及 FastAPI + PostgreSQL 后端，支持会议 CRUD 和文本上传，用 Alembic 管理表结构，31 项真实 PostgreSQL 测试通过。下一步接入云 LLM 结构化抽取；人工确认和部署尚未实现。”
 
 完成 Batch 3、真实评估和部署后再更新介绍。最终 Cheatsheet 在 Batch 7 编制，不提前填入不存在的效果、Bug 或上线成果。
+
+## 新主线增量：Authentication（已实现）
+
+单公司多用户；app/models/user.py 的 User 保存 email、Argon2id password_hash、is_active/is_owner。app/core/security.py 的 current_user() 校验固定 HS256、issuer/audience/exp/iat/sub，并重新查询用户状态；create_token() 颁发限时 JWT。app/api/auth.py 的 register/login/me 暴露接口，客户端不能指定 Owner。app/services/access.py 的 meeting_query/require_meeting 将权限约束用于列表和对象访问，非本人返回 404 防枚举。
+
+scripts/promote_owner.py 由本地管理员显式提升已注册用户；运行 `uv run python -m scripts.promote_owner --email ...`。不可在模型工具中调用。迁移 0002_auth 保留旧会议为空 creator，普通用户不可访问。tests/test_auth.py 覆盖重复注册、无效登录/JWT、禁止自提权、跨用户访问和禁用账户。

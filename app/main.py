@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
+from app.api.auth import router as auth_router
 from app.api.meetings import router
 from app.core.config import Settings
 from app.db.session import build_engine
@@ -26,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine.dispose()
 
     app = FastAPI(title="Meeting Action Assistant", lifespan=lifespan)
+    app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = sessionmaker(engine, expire_on_commit=False)
 
@@ -42,5 +44,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # 这是进程存活检查，不伪装成数据库 readiness。
         return {"status": "ok"}
 
+    app.include_router(auth_router)
     app.include_router(router)
     return app

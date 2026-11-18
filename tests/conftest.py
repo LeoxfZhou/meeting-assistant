@@ -39,7 +39,7 @@ def database_url() -> Iterator[str]:
 
 @pytest.fixture
 def client(database_url: str) -> Iterator[TestClient]:
-    app = create_app(Settings(_env_file=None, database_url=database_url, app_env="test"))
+    app = create_app(Settings(_env_file=None, database_url=database_url, app_env="test", jwt_secret="test-only-" * 8))
     engine = app.state.engine
     with engine.connect() as connection:
         transaction = connection.begin()
@@ -50,6 +50,8 @@ def client(database_url: str) -> Iterator[TestClient]:
             app.dependency_overrides[get_session] = override_session
             try:
                 with TestClient(app) as test_client:
+                    from tests.helpers import authenticate
+                    authenticate(test_client)
                     yield test_client
             finally:
                 transaction.rollback()

@@ -10,6 +10,16 @@ class Settings(BaseSettings):
 
     app_env: Literal["development", "test", "production"] = "development"
     database_url: SecretStr
+    jwt_secret: SecretStr
+    jwt_expire_minutes: int = 60
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def strong_jwt_secret(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("JWT_SECRET must contain at least 32 characters")
+        return value
+
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     @field_validator("database_url")

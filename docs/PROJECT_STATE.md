@@ -1,6 +1,14 @@
+# 最新进展（2026-11-18）
+
+当前 feature/auth：基础版 31 测试复验通过后已合并 main；新增注册、登录、Argon2id、JWT、Current User、Creator/Owner 会议权限。迁移 0002_auth 已应用；36 tests passed（8.06s），alembic check 无差异。旧会议 creator_user_id 可空以保留已有数据，仅 Owner 能访问；新会议必须来自已认证用户。Owner 通过本地管理命令显式指定，不自动赋予首个注册者。
+
+最新范围以 MASTER_GOAL.md 为准，旧 Batch 停止规则失效。下一步自动继续 LLM/Candidate/Task，再 RAG/LangGraph/Evaluation/Docker。无 Remote，不伪造 PR；没有配置云 LLM Key 时继续不依赖 Key 的工作。
+
+以下为基础版历史验收快照（其中“下一 Batch 待批准”等旧规则已失效）：
+
 # 项目状态
 
-最后核验：2026-11-18（北京时间）。**Batch 1 Backend Foundation 已完成；停止于此，未开始 Batch 2。** 主线仍为 LLM Application / AI Backend / Workflow / Deployment；QLoRA Optional。
+最后核验：2026-11-18（北京时间）。**新 MASTER GOAL 已生效，正连续推进完整本地主线。** 主线仍为 LLM Application / AI Backend / Workflow / Deployment；QLoRA Optional。
 
 ## 已完成
 

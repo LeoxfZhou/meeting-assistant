@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, String, Text, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -17,6 +17,7 @@ class Meeting(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    creator_user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", name="fk_meetings_creator_user_id", ondelete="RESTRICT"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text)
     source_type: Mapped[str] = mapped_column(String(20), default="pasted_text")
