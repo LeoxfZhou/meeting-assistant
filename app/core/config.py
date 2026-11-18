@@ -10,6 +10,12 @@ class Settings(BaseSettings):
 
     app_env: Literal["development", "test", "production"] = "development"
     database_url: SecretStr
+    llm_api_key: SecretStr = SecretStr("")
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_connect_timeout: float = 5.0
+    llm_read_timeout: float = 30.0
+    llm_max_attempts: int = 3
     jwt_secret: SecretStr
     jwt_expire_minutes: int = 60
 

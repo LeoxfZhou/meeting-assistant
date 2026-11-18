@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.security import CurrentUser
 from app.services.access import meeting_query, require_meeting
 from app.db.session import get_session
+from app.models.action_item import ActionItem
 from app.models.meeting import Meeting
 from app.schemas.meeting import MAX_FILE_BYTES, MeetingCreate, MeetingPatch, MeetingRead
 
@@ -74,7 +75,9 @@ def get_meeting(meeting_id: UUID, session: DB, user: CurrentUser) -> Meeting:
 
 @router.patch("/{meeting_id}", response_model=MeetingRead)
 def patch_meeting(meeting_id: UUID, payload: MeetingPatch, session: DB, user: CurrentUser) -> Meeting:
-    meeting = require_meeting(session, meeting_id, user)
+    meeting = require_meeting(session, meeting_id, user, lock=True)
+    if 'content' in payload.model_fields_set and session.scalar(select(ActionItem.id).where(ActionItem.meeting_id == meeting_id).limit(1)):
+        raise HTTPException(409, 'Meeting with candidates cannot change content')
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(meeting, field, value)
     session.commit()
@@ -84,6 +87,9 @@ def patch_meeting(meeting_id: UUID, payload: MeetingPatch, session: DB, user: Cu
 
 @router.delete("/{meeting_id}", status_code=204)
 def delete_meeting(meeting_id: UUID, session: DB, user: CurrentUser) -> Response:
-    session.delete(require_meeting(session, meeting_id, user))
+    meeting = require_meeting(session, meeting_id, user, lock=True)
+    if session.scalar(select(ActionItem.id).where(ActionItem.meeting_id == meeting_id).limit(1)):
+        raise HTTPException(409, 'Meeting with candidates cannot be deleted')
+    session.delete(meeting)
     session.commit()
     return Response(status_code=204)

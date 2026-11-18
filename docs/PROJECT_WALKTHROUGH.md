@@ -118,3 +118,13 @@ Batch 1 已实现数据库连接超时、请求 Session 回收/异常回滚、50
 单公司多用户；app/models/user.py 的 User 保存 email、Argon2id password_hash、is_active/is_owner。app/core/security.py 的 current_user() 校验固定 HS256、issuer/audience/exp/iat/sub，并重新查询用户状态；create_token() 颁发限时 JWT。app/api/auth.py 的 register/login/me 暴露接口，客户端不能指定 Owner。app/services/access.py 的 meeting_query/require_meeting 将权限约束用于列表和对象访问，非本人返回 404 防枚举。
 
 scripts/promote_owner.py 由本地管理员显式提升已注册用户；运行 `uv run python -m scripts.promote_owner --email ...`。不可在模型工具中调用。迁移 0002_auth 保留旧会议为空 creator，普通用户不可访问。tests/test_auth.py 覆盖重复注册、无效登录/JWT、禁止自提权、跨用户访问和禁用账户。
+
+## 新主线增量：Extraction / Review / Tasks（已实现）
+
+app/llm/client.py 的 LLMClient.generate() 只封装兼容 API，app/llm/extraction.py 的 extract()/text_windows() 分窗覆盖、严格 Pydantic 校验、证据必须为原文连续片段；超过 50000 字符明确返回 413，不静默截断。未知负责人只保留 assignee_name，与系统用户不同。
+
+app/api/actions.py 的 extract_meeting() 网络调用前释放事务，保存时重新锁定会议检查正文和并发结果。ActionItem 状态 pending/confirmed/rejected；CandidateEdit/Review 使用 revision 防止旧页面确认。app/services/actions.py 的 confirm_candidate() 先权限校验和行锁，同事务写确认与 Task，UNIQUE(source_action_item_id) 防并发重复。失败由请求 Session rollback，不留下已确认但无 Task 的状态。已有候选的会议不能改正文或删除，避免证据失效。
+
+Task 使用 assignee_user_id 可空 + assignee_name，/tasks/my 只返回绑定到当前 User 的任务。被指派用户可看自己任务并修改 status，不能改标题/负责人，也不因分配任务获得整个会议访问权。会议 Creator/Owner 可管理完整任务。
+
+关键文件：app/models/action_item.py（ActionItem/Task）；app/schemas/actions.py（CandidateEdit/Review/TaskEdit）；migrations/versions/0003_actions_tasks.py；tests/test_actions.py（审核、权限、并发/事务）；tests/test_llm.py（成功/非法 JSON/错误字段/timeout/429/5xx/401/403）。实际云端调用未执行，所有模型结果明确来自 Mock。

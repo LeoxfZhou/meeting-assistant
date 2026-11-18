@@ -1,3 +1,7 @@
+# 最新进展：feature/extraction-review-tasks（2026-11-18）
+
+新增迁移 0003_actions_tasks；候选编辑/拒绝/确认、Task List/My Tasks/Get/Update 已实现。57 tests passed（11.76s），包括真实 PG 并发确认唯一任务、写入失败 rollback。LLM Client 具备 HTTPS、有限重试/退避/Retry-After、401/403 不重试、严格 JSON/Pydantic 和证据原文验证；无 LLM_API_KEY/BASE_URL/MODEL，真实调用待配置，当前只 Mock 验证。连续开发继续 RAG，不因缺 Key 停止。
+
 # 最新进展（2026-11-18）
 
 当前 feature/auth：基础版 31 测试复验通过后已合并 main；新增注册、登录、Argon2id、JWT、Current User、Creator/Owner 会议权限。迁移 0002_auth 已应用；36 tests passed（8.06s），alembic check 无差异。旧会议 creator_user_id 可空以保留已有数据，仅 Owner 能访问；新会议必须来自已认证用户。Owner 通过本地管理命令显式指定，不自动赋予首个注册者。

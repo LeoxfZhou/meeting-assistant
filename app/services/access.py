@@ -14,7 +14,7 @@ def meeting_query(user: User):
 def require_meeting(session: Session, meeting_id: UUID, user: User, *, lock: bool = False) -> Meeting:
     query = meeting_query(user).where(Meeting.id == meeting_id)
     if lock:
-        query = query.with_for_update()
+        query = query.with_for_update().execution_options(populate_existing=True)
     meeting = session.scalar(query)
     if meeting is None:
         # 不泄露另一用户的 Meeting 是否存在。
