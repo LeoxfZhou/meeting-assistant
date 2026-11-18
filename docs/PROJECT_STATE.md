@@ -4,7 +4,7 @@
 
 ## Git
 
-本轮开发分支 `feature/real-provider-verification`，验收后本地合并到 `main` 交接。基础版 d753085 → e8ed364 → 537953e 已保留并合入 main；Auth f431b78、候选/任务 317248d 已测试后本地合入 main。RAG/工作流/本地部署已由5955295合入main，本轮修复真实Provider兼容性并更新验证证据，最终 hash 以 git log 为准。未配置 Remote、未 Push、未创建 PR。CI 配置已准备，未在 GitHub 执行。
+本轮交接分支 `docs/github-ci-handoff`，验收后本地合并到 `main` 交接。基础版 d753085 → e8ed364 → 537953e 已保留并合入 main；Auth f431b78、候选/任务 317248d 已测试后本地合入 main。RAG/工作流/本地部署已由5955295合入main，本轮修复真实Provider兼容性并更新验证证据，最终 hash 以 git log 为准。用户创建Private仓库并配置origin后，main b7cd07e已推送；GitHub API确认private=true。首次Actions 44308229328已success，73 passed in 14.73s。文档交接通过真实PR推进，详见GITHUB_WORKFLOW。
 
 ## 已实现与边界
 
@@ -51,7 +51,7 @@ PostgreSQL 16.16 + pgvector 0.8.7。业务表 users、meetings、action_items、
 ## 人工阻塞与下一步
 
 1. LLM配置与本轮有限调用已完成；用户可在UI真实审核，并抽查本轮Bad Cases。后续更大规模评测需另定预算。
-2. GitHub 登录与仓库选择/可见性确认；之后建立真实 Remote/PR/CI。默认建议 Private，未自动创建。
+2. Private GitHub已连通并真实运行CI；保持Private。后续按PR检查与合并，不需要重复登录授权。
 3. 用户自行准备 CPU Linux Server 和 SSH；之后实际部署、日志、重启、持久化验证。当前没有云部署证据。DNS/HTTPS Optional。
 
 所有 Secret、原始/派生数据、outputs、models、.venv 均忽略。P0 含原文报告保留本地，不能默认公开；公开前仍需数据许可、个人信息与代码许可证确认。
@@ -67,3 +67,7 @@ PostgreSQL 16.16 + pgvector 0.8.7。业务表 users、meetings、action_items、
 ## 本轮真实云验证
 
 18次生成尝试，16次HTTP200、1次HTTP400、1次连接超时；输入12363/输出1491/总计13854 tokens，cost=null。Smoke+5类抽取通过；真实候选→自动化API确认→Task/幂等通过；Docker真实出站通过且临时记录清理。不是用户本人UI点击。真实失败包括旧参数不兼容和空拒答Schema错误，已修复并保留原记录。没有AliMeeting云调用。详细界限见 REAL_PROVIDER_VERIFICATION.md。
+
+## GitHub远程证据
+
+origin=https://github.com/LeoxfZhou/meeting-assistant.git；首次push与CI针对b7cd07ebf554854078e55f0631395f5eef4dd4c2。Actions成功，73项测试，14.73秒；非本地结果冒充远程。CI不配置真实LLM Key，只运行Mock外部调用与真实PG/CPU测试。链接：https://github.com/LeoxfZhou/meeting-assistant/actions/runs/44308229328 。

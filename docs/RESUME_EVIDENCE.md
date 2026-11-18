@@ -24,18 +24,20 @@
 | RAG生成 | 6题首轮5/6；有答案引用4/4；无答案1/2 | 空拒答修复后单题复测通过，非完整集指标 |
 | 容器 | API/PG healthy；重启后审核状态保留 | outputs/checks/compose_smoke.json；合成候选fixture |
 | 页面 | 注册/会议/索引/检索显示通过 | outputs/checks/ui_smoke.json与截图 |
-| Git | 本地branch/commit/merge | git log；无远程PR/CI运行 |
+| Git / CI | Private origin已push；远程73 passed / 14.73s | Actions 44308229328，b7cd07e；真实文档PR交接见GITHUB_WORKFLOW |
 
 ## Planned / 需人工完成
 
-当前Provider小样本兼容性和真实失败已验证；仍待用户UI Demo、字段人工评估、完整模型指标与真实成本；GitHub Private repo/PR/CI；CPU Linux 部署/SSH/备份恢复验收。HTTPS、ASR、QLoRA为后续可选，不写成现有能力。
+当前Provider小样本兼容性和真实失败已验证；仍待用户UI Demo、字段人工评估、完整模型指标与真实成本；GitHub已Private接入并通过首轮CI；CPU Linux 部署/SSH/备份恢复验收。HTTPS、ASR、QLoRA为后续可选，不写成现有能力。
 
 ## 可用简历表述
 
 “开发中文会议行动助手，基于 FastAPI/PostgreSQL 实现人工审核到任务创建的事务链路，以唯一约束保证重复确认幂等；构建带访问权限过滤的 CPU multilingual embedding + pgvector 检索与 LangGraph 受控工作流，完成73项测试和本地 Docker Compose 重启验证。”
 
-如写 RAG 数值，必须附“小型自编合成集22个有答案问题”；不得单写“准确率100%”。不得声称生产部署、企业用户收益、真实模型抽取F1、远程CI通过或成本下降。API和实际class/function见 PROJECT_WALKTHROUGH，技术取舍见 INTERVIEW_CHEATSHEET。
+如写 RAG 数值，必须附“小型自编合成集22个有答案问题”；不得单写“准确率100%”。不得声称生产部署、企业用户收益、真实模型抽取F1或成本下降。API和实际class/function见 PROJECT_WALKTHROUGH，技术取舍见 INTERVIEW_CHEATSHEET。
 
 ## 本轮 Real API Verified
 
 gpt-6-luna，18次尝试、16次HTTP200；5类合成抽取5/5通过，真实抽取→候选→API确认→Task与Docker出站通过。输入12363/输出1491 tokens；未计算价格。真实失败：旧token参数HTTP400，拒答空answer被Schema拒绝；修复及原始证据见 REAL_PROVIDER_VERIFICATION。确认由授权自动API测试执行，不能写成真人UI验收。未对AliMeeting云评测。
+
+远程CI为实测，可如实写“GitHub Actions执行73项测试通过”；该结果不代表云服务器已经部署，也不是多人独立Code Review证明。

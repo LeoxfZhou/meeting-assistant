@@ -9,7 +9,7 @@
 - 73 项 pytest 通过，全部数据库集成使用真实 PostgreSQL；不是 SQLite 替代。
 - 真实 CPU 检索：25 题合成集（22 有答案），Hit@5=1.0、Recall@5=1.0、MRR=0.893939。规模小且自编，不代表真实企业效果。
 - **已完成 gpt-6-luna 小样本真实验证**：5类合成抽取通过，API确认到Task和Docker真实出站通过。RAG首轮5/6通过，1个空拒答失败修复后单题复测通过；不能当作全量准确率。详见 [真实验证](docs/REAL_PROVIDER_VERIFICATION.md)。
-- Compose 已真实运行及重启验证；没有云服务器部署、GitHub Remote/PR 或远程 CI 成功记录。
+- Compose 已真实运行及重启验证；尚未部署云服务器；Private GitHub 仓库已连接，首次远程CI通过（73 tests）。
 
 ## 快速启动
 
@@ -118,7 +118,7 @@ uv run python -m scripts.evaluate_rag --with-llm --output outputs/evaluations/ra
 
 ## Git / 数据 / 部署
 
-Local feature branch + tests + commit + merge；未创建远程仓库，不伪造 Issue/PR/CI。公开前运行 `uv run python -m scripts.audit_public_repo` 审查 index/history。此扫描不是完美的 Secret 保证，仍需人工许可与个人信息审查。
+已从本地分支流程进入 Private GitHub 的 branch → push → PR → CI → merge 流程；过去本地开发没有补造PR。真实证据见 [GitHub工作流](docs/GITHUB_WORKFLOW.md)。公开前运行 `uv run python -m scripts.audit_public_repo` 审查 index/history。此扫描不是完美的 Secret 保证，仍需人工许可与个人信息审查。
 
 `.env`、raw/processed/annotations、所有 outputs（包括含 Train 原文的审计报告）、models、数据库文件、虚拟环境与私钥都不进入 Git。原始审计资产保留。数据来源/许可仍待确认，见 [data/README.md](data/README.md)。
 

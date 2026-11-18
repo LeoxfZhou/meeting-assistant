@@ -198,7 +198,7 @@ Dockerfile 使用官方 Python3.13 + 固定 uv0.10.12、uv sync --frozen --no-de
 
 ## 24. Git Workflow
 
-基础版 d753085/e8ed364/537953e 真实保留；复验后 main 合并。feature/auth 的 f431b78、feature/extraction-review-tasks 的 317248d 经过测试后本地合并。RAG/Workflow/Evaluation/Deployment 后续提交以 git log 为准。无 Remote/PR，不伪造团队协作记录。CI 文件仅准备，远程运行待 GitHub 建立后验证。
+基础版 d753085/e8ed364/537953e 真实保留；复验后 main 合并。feature/auth 的 f431b78、feature/extraction-review-tasks 的 317248d 经过测试后本地合并。RAG/Workflow/Evaluation/Deployment 后续提交以 git log 为准。此前未配置Remote，因此不补造旧PR。用户建立Private仓库后，b7cd07e首次push已通过真实Actions：73项测试、14.73秒；本轮文档以新分支/真实PR交接，见GITHUB_WORKFLOW。
 
 ## 25. Issues & Fixes
 
@@ -215,3 +215,7 @@ AI：读取与验证旧资产、编写大部分实现、迁移/测试、构造�
 入口 scripts/verify_real_provider.py 的 BudgetTransport.handle_request 在发出请求前落盘计数，响应仅保留安全指标和合成内容；main 分阶段执行抽取、隔离PG业务链路、RAG子集。pytest不自动调用此脚本。18次尝试与用量、失败/复测口径见 REAL_PROVIDER_VERIFICATION.md。
 
 实际发现的max_tokens错误推动LLMClient可配置token参数；RAG拒答为空推动prompt要求非空说明，Schema保持严格。候选确认是用户授权的API自动测试，不是用户UI确认。生产日志新增http_status，依然不记录完整正文或Secret。
+
+## 28. GitHub CI 实际链路
+
+.github/workflows/tests.yml 在push/PR触发，Ubuntu runner启动pgvector PostgreSQL服务，安装Python3.13与锁定依赖，下载固定revision的CPU embedding，再运行pytest。测试创建随机独立数据库后清理。CI只用临时数据库/JWT测试值，不上传.env、不配置LLM Key、不调用付费Provider。首次成功run为44308229328，源commit b7cd07e。Git网络需遵循本机已有系统代理；没有改变全局Git设置。
