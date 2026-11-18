@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from app.llm.client import LLMClient, LLMError
 
 
@@ -55,4 +55,7 @@ def extract(text: str, client: LLMClient) -> Extraction:
             if key not in seen:
                 result.append(item)
                 seen.add(key)
-    return Extraction(action_items=result)
+    try:
+        return Extraction(action_items=result)
+    except ValidationError as exc:
+        raise LLMError("too_many_candidates") from exc

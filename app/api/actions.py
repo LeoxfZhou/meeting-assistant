@@ -12,6 +12,8 @@ from app.models.action_item import ActionItem, Task
 from app.models.user import User
 from app.schemas.actions import CandidateRead, CandidateEdit, Review, TaskRead, TaskEdit
 from app.services.access import require_meeting
+from app.workflow.graph import run_extraction, run_confirmation
+from app.workflow.tools import ToolContext, execute_tool, tool_schemas
 from app.services.actions import require_candidate, check_pending, validate_assignee, confirm_candidate, task_query, update_task
 
 router = APIRouter(tags=['actions'])
@@ -19,28 +21,25 @@ DB = Annotated[Session, Depends(get_session)]
 
 
 def get_llm(request: Request) -> LLMClient:
-    return LLMClient(request.app.state.settings)
+    return LLMClient(request.app.state.settings, context={"user_id":getattr(request.state,"user_id",None), "meeting_id":request.path_params.get("meeting_id")})
 
 
 @router.post('/meetings/{meeting_id}/extract', response_model=list[CandidateRead], status_code=201)
 def extract_meeting(meeting_id: UUID, session: DB, user: CurrentUser, llm: Annotated[LLMClient, Depends(get_llm)]):
-    meeting = require_meeting(session, meeting_id, user)
-    if session.scalar(select(ActionItem.id).where(ActionItem.meeting_id == meeting_id).limit(1)):
-        raise HTTPException(409, 'Candidates already exist; review existing candidates')
-    original = meeting.content
-    session.commit()  # 不跨网络调用持有事务锁。
-    result = extract(original, llm)
-    meeting = require_meeting(session, meeting_id, user, lock=True)
-    if meeting.content != original:
-        raise HTTPException(409, 'Meeting changed during extraction')
-    if session.scalar(select(ActionItem.id).where(ActionItem.meeting_id == meeting_id).limit(1)):
-        raise HTTPException(409, 'Concurrent extraction already saved candidates')
-    items = [ActionItem(meeting_id=meeting_id, task=i.task, assignee_name=i.assignee_name,
-                        due_date_text=i.deadline, evidence=i.evidence) for i in result.action_items]
-    session.add_all(items)
-    session.commit()
-    log_event('extraction', meeting_id=meeting_id, user_id=user.id, status='success', candidate_count=len(items))
-    return items
+    result = run_extraction(meeting_id, ToolContext(session, user), llm)
+    return result['candidates']
+
+
+@router.post('/meetings/{meeting_id}/workflow')
+def extraction_workflow(meeting_id: UUID, session: DB, user: CurrentUser, llm: Annotated[LLMClient, Depends(get_llm)]):
+    result = run_extraction(meeting_id, ToolContext(session, user), llm)
+    return {'status':result['status'], 'candidate_ids':[str(x.id) for x in result['candidates']],
+            'knowledge_sources':result['knowledge_sources']}
+
+
+@router.get('/workflow/tools')
+def tools(user: CurrentUser):
+    return {'tools':tool_schemas(), 'write_policy':'Authenticated human review required; no arbitrary execution endpoint'}
 
 
 @router.get('/meetings/{meeting_id}/candidates', response_model=list[CandidateRead])
@@ -66,7 +65,7 @@ def edit_candidate(candidate_id: UUID, payload: CandidateEdit, session: DB, user
 
 @router.post('/candidates/{candidate_id}/confirm', response_model=TaskRead)
 def confirm(candidate_id: UUID, payload: Review, session: DB, user: CurrentUser):
-    return confirm_candidate(session, candidate_id, payload.revision, user)
+    return run_confirmation(candidate_id, payload.revision, ToolContext(session, user, human_approved=True))
 
 
 @router.post('/candidates/{candidate_id}/reject', response_model=CandidateRead)
@@ -109,4 +108,4 @@ def get_task(task_id: UUID, session: DB, user: CurrentUser):
 
 @router.patch('/tasks/{task_id}', response_model=TaskRead)
 def patch_task(task_id: UUID, payload: TaskEdit, session: DB, user: CurrentUser):
-    return update_task(session, task_id, payload.model_dump(exclude_unset=True), user)
+    return execute_tool('update_task', {'task_id':str(task_id), 'changes':payload.model_dump(exclude_unset=True)}, ToolContext(session, user, human_approved=True))

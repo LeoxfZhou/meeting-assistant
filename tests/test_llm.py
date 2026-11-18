@@ -74,3 +74,17 @@ def test_transient_success():
         return httpx.Response(503) if len(calls)==1 else response('{"action_items":[]}')
     assert llm(handler).generate([],Extraction).action_items==[]
     assert len(calls)==2
+
+
+def test_long_windows_cover_and_reject_partial_failure():
+    from app.llm.extraction import text_windows
+    text='小张周五完成测试。\n' * 1000
+    windows=text_windows(text)
+    assert windows[0].startswith('小张') and windows[-1].endswith('。\n')
+    assert len(windows)>1
+    calls=[]
+    def handler(request):
+        calls.append(request)
+        return response('{"action_items":[]}') if len(calls)==1 else response('invalid')
+    with pytest.raises(LLMError): extract(text,llm(handler))
+    with pytest.raises(LLMError,match='meeting_too_long_for_extraction'): extract('x'*50001,llm(handler))

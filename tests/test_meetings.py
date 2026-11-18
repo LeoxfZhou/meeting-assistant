@@ -126,10 +126,10 @@ def test_database_failure(client, caplog):
 def test_postgres_schema_and_migration(database_url):
     engine = build_engine(database_url)
     try:
-        assert set(inspect(engine).get_table_names()) == {"meetings", "users", "action_items", "tasks", "alembic_version"}
+        assert set(inspect(engine).get_table_names()) == {"meetings", "users", "action_items", "tasks", "company_documents", "knowledge_chunks", "alembic_version"}
         with engine.connect() as conn:
             assert conn.scalar(text("SELECT version()" )).startswith("PostgreSQL")
-            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0003_actions_tasks"
+            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0004_knowledge"
         cfg = Config("alembic.ini")
         cfg.attributes["database_url"] = database_url
         command.check(cfg)

@@ -18,7 +18,8 @@ class LLMError(Exception):
 
 
 class LLMClient:
-    def __init__(self, settings: Settings, *, transport=None, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, settings: Settings, *, transport=None, context: dict | None = None, sleep: Callable[[float], None] = time.sleep):
+        self.context = context or {}
         self.settings = settings
         self.transport = transport
         self.sleep = sleep
@@ -62,8 +63,8 @@ class LLMClient:
                         safe_usage = {k: v for k, v in usage.items() if k in
                                       {"prompt_tokens", "completion_tokens", "total_tokens"}
                                       and type(v) is int and v >= 0} if isinstance(usage, dict) else {}
-                        log_event("llm", model=s.llm_model, latency_ms=round((time.monotonic()-start)*1000),
-                                  status="success", token_usage=safe_usage, estimated_cost=None, attempts=attempt+1)
+                        log_event("llm", **self.context, model=s.llm_model, latency_ms=round((time.monotonic()-start)*1000),
+                                  status="success", token_usage={"input_tokens":safe_usage.get("prompt_tokens"), "output_tokens":safe_usage.get("completion_tokens"), "total_tokens":safe_usage.get("total_tokens")}, estimated_cost=None, attempts=attempt+1)
                         return parsed
                 except httpx.ConnectTimeout:
                     error = "connect_timeout"
@@ -74,7 +75,7 @@ class LLMClient:
                 except httpx.TransportError:
                     error = "transport_error"
                 if attempt + 1 == attempts:
-                    log_event("llm", model=s.llm_model, latency_ms=round((time.monotonic()-start)*1000),
+                    log_event("llm", **self.context, model=s.llm_model, latency_ms=round((time.monotonic()-start)*1000),
                               status="failed", error_type=error, attempts=attempt+1)
                     raise LLMError(error or "provider_error", 504 if error and 'timeout' in error else 502)
                 delay = min(2 ** attempt, 8)

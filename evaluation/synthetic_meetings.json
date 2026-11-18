@@ -1,0 +1,20 @@
+{
+  "notice": "Original synthetic evaluation fixtures, not real customer meetings or AliMeeting data.",
+  "meetings": [
+    {
+      "slug": "alpha-review",
+      "title": "2026-11-12 Alpha 延期评审",
+      "content": "2026年11月12日，林悦主持 Alpha 评审。会议决定：Alpha 试点从12月10日延期至2026年12月20日。原因是权限测试缺口和专有缩写歧义，林悦负责补齐权限测试。"
+    },
+    {
+      "slug": "beta-review",
+      "title": "2026-11-18 Beta 验收评审",
+      "content": "周宁：Beta 的费用报销验收样本缺少混合城市住宿票据。我负责在2026年11月25日前补齐验收样本。当前只是验收目标，没有真实支付功能。"
+    },
+    {
+      "slug": "security-review",
+      "title": "2026-11-17 安全例会",
+      "content": "安全负责人陈墨：历史会议向量检索必须先过滤当前用户权限，再返回 Top-K。不得将 AliMeeting 评测资料导入企业知识索引，避免数据泄漏。"
+    }
+  ]
+}

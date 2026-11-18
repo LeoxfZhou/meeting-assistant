@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -13,11 +13,11 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")
     llm_base_url: str = ""
     llm_model: str = ""
-    llm_connect_timeout: float = 5.0
-    llm_read_timeout: float = 30.0
-    llm_max_attempts: int = 3
+    llm_connect_timeout: float = Field(default=5.0, gt=0, le=30)
+    llm_read_timeout: float = Field(default=30.0, gt=0, le=120)
+    llm_max_attempts: int = Field(default=3, ge=1, le=4)
     jwt_secret: SecretStr
-    jwt_expire_minutes: int = 60
+    jwt_expire_minutes: int = Field(default=60, ge=1, le=1440)
 
     @field_validator("jwt_secret")
     @classmethod

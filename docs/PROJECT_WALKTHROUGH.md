@@ -1,130 +1,211 @@
-# 项目 Walkthrough（持续更新）
+# 中文会议行动助手：可交接教学 Walkthrough
 
-更新：2026-11-18。供后续项目教学和面试使用。当前已实现 P0 与 Batch 1 Backend Foundation。LLM、人工确认、Task 和 LangGraph 仍为后续设计。
+核验日期：2026-11-18。面向没有参与开发的“C老师·项目实战指导”。以下区分已经运行的程序、Mock 验证的外部模型行为、仍待人工的真实模型与云部署。最新范围见 MASTER_GOAL；旧 project-plan 是历史资料。
 
 ## 1. Business Problem
 
-会议中安排分散，用户需要带证据的候选事项，并控制是否进入正式任务。我们模拟单用户工作流，没有真实企业使用或上线收益数据。
+我们模拟一家公司的内部会议行动管理：会议安排散落在文字中，负责人可能未注册，截止时间可能不明确，AI 不能替人批准任务。另一个问题是制度与历史会议难查，因此用 RAG 返回可追溯依据。没有真实企业用户、生产收益或自动通知系统。
 
-## 2. Architecture（实际实现）
+业务不变量：模型只提出候选；人类编辑/确认/拒绝；正式任务来自确认，不能因为模型说“已确认”就写入。系统用户 User 与会议人物 assignee_name 独立，名字相同不自动绑定。
 
-FastAPI factory → API 路由 → Pydantic 输入校验 → SQLAlchemy Session/Meeting → PostgreSQL。Alembic 单独管理 schema 版本。同步路由与同步数据库足够支撑本机 MVP，避免异步 Session 和多层 Repository 增加讲解成本。
+## 2. Final Architecture（本地已实现）
 
-app/main.py 的 create_app() 创建 Engine、sessionmaker 与路由；lifespan 在退出时释放 Engine。/health 只代表进程可用；数据库错误返回 503，日志仅包含类型与路由模板，防止 SQL 参数泄露。
+```text
+Browser / Swagger → FastAPI → JWT + Authorization
+  ├─ Meeting CRUD / TXT-MD → SQLAlchemy → PostgreSQL
+  ├─ LangGraph extraction → httpx Cloud LLM Client → strict Schema
+  │                       → optional search_knowledge → pending candidates
+  │   Human confirm → confirmation graph → create_task tool → transaction + UNIQUE
+  └─ Company Docs / authorized Meetings → chunk → CPU E5 ONNX → pgvector
+      Question → query embedding → authorized SQL Top-K → context → LLM answer + citations
+```
 
-## 3. End-to-End Data Flow（实际实现）
+CPU Generation 不在本地运行；本地 ONNX 模型只做 Embedding。FastAPI/pgvector 在 Compose，模型目录只读挂载。没有 Redis、Celery、独立向量服务、Multi-Agent 或训练栈。
 
-POST /meetings → MeetingCreate 校验标题/正文 → create_meeting() → save_meeting() → Session.add/commit/refresh → MeetingRead 序列化为 201 JSON。get_session() 为请求提供独立 Session，异常 rollback，结束 close。
+## 3. End-to-End Data Flow
 
-GET 使用 select()/Session.get()；不存在返回 404。PATCH 使用 exclude_unset=True，只更新提供字段；拒绝 null/空 PATCH，避免无意覆盖。DELETE 提交后返回空 204。列表按 created_at 与 id 排序，limit/offset 简单分页。
+1. 用户注册、登录取得 JWT；服务端每次验证签名/时效并查用户状态。
+2. 创建会议时 creator_user_id 来自当前认证用户，不接受客户端指定归属。
+3. 提取请求进入 Graph，读取授权会议，释放数据库事务后调用 LLM，避免长期持锁。
+4. 分窗覆盖正文；每窗 strict JSON/Pydantic；证据必须是该窗连续原文。任一窗失败，整次返回错误，不保存“部分成功”。
+5. 如文本包含制度/SOP/P1/P2/流程线索，受控检索只作为审核参考，不能从制度凭空创建新任务。
+6. 保存前重新锁定会议并比较原文，防止模型调用期间会议变化；并发提取只允许一方保存候选。
+7. Graph 结束于 awaiting_human_review。候选是 PostgreSQL 持久状态；没有占住 HTTP 请求等用户。
+8. 用户编辑会增加 revision。确认时校验版本、权限、状态；同事务更新状态并写 Task。
+9. 重复确认返回同一 Task；分配给系统用户后进入 My Tasks，未绑定用户仍显示文本姓名。
+10. 会议索引是另一个显式操作；修改正文/标题会清除旧索引，下一次检索不会读到旧版本。
 
-上传为 multipart → 扩展名和 MIME 检查 → 最多读取 1 MiB + 1 字节 → UTF-8-sig 解码 → MeetingCreate 再校验 → 同一 save_meeting() 持久化。文件名仅用于推导标题，不作为磁盘路径。文件不永久保留；multipart 解析仍可能使用框架临时缓冲，当前没有公网入口流量限制。
+## 4. Real Code Map
 
-P0 真实链路仍为只读 ZIP → 内层 ZIP → Tab CSV/JSON → 数据审计 → 本地报告/清单。
-
-## 4. Code Map（全部为真实文件与符号）
-
-| 文件 | class/function | 职责 |
+| 文件 | class/function | 教学重点 |
 |---|---|---|
-| app/main.py | create_app / health / database_error | factory、存活检查、DB 错误映射 |
-| app/core/config.py | Settings / postgres_only | .env 与环境变量、PostgreSQL URL 校验 |
-| app/db/session.py | Base / build_engine / get_session | ORM 基类、连接池、Session 生命周期 |
-| app/models/meeting.py | Meeting | typed Mapped 字段和数据库约束 |
-| app/schemas/meeting.py | MeetingCreate / MeetingPatch / MeetingRead | 输入输出契约、部分更新 |
-| app/api/meetings.py | create_meeting / list_meetings / get_meeting / patch_meeting / delete_meeting | CRUD 路由 |
-| app/api/meetings.py | upload_meeting / find_meeting / save_meeting | 上传、404 查询和共享创建逻辑 |
-| migrations/env.py | Alembic 执行入口 | 环境配置、metadata、在线/离线迁移 |
-| migrations/versions/0001_create_meetings.py | upgrade / downgrade | 建表与显式回退 |
-| tests/conftest.py | database_url / client | 临时真实 PG 库、迁移、savepoint 隔离、清理 |
-| tests/test_meetings.py | test_crud / test_upload / test_bad_upload 等 | 请求行为与异常验证 |
-| tests/test_meetings.py | test_postgres_schema_and_migration / test_real_commit_persists_between_sessions | 真实 PG schema、迁移差异、跨 Session 提交 |
-| scripts/audit_alimeeting4mug.py | inspect_archive / audit_record / render_report / main | P0 只读原包审计及本地报告 |
-| scripts/audit_alimeeting4mug.py | cross_split_overlaps / cross_split_long_sentence_pairs / example_markdown | 重复检测、Train 样例（不公开报告） |
+| app/main.py | create_app、request_log、database_error、llm_error | factory、依赖、生命周期、错误与 request_id |
+| app/core/config.py | Settings | env/SecretStr、超时与重试上限 |
+| app/core/security.py | current_user、create_token、verify_password | JWT 固定算法、DB 用户状态、Argon2 |
+| app/core/body_limit.py | RequestBodyLimitMiddleware | multipart 解析前的 4MiB 请求上限 |
+| app/core/logging.py | log_event、request_context | JSON 字段、失败 ERROR、上下文隔离 |
+| app/db/session.py | Base、build_engine、get_session | 连接池、每请求 Session、异常 rollback |
+| app/models/user.py | User | 唯一邮箱、散列密码、active/owner |
+| app/models/meeting.py | Meeting | 所有者、正文、来源、时间 |
+| app/models/action_item.py | ActionItem、Task | 候选与正式任务分表、唯一来源约束 |
+| app/models/knowledge.py | CompanyDocument、KnowledgeChunk | 双来源、Vector(384)、来源/字符范围 |
+| app/schemas/auth.py | Register、Login、UserRead、Token | 不暴露 password_hash，不接受自提权 |
+| app/schemas/meeting.py | MeetingCreate、MeetingPatch、MeetingRead | 部分更新、拒绝空值与未知字段 |
+| app/schemas/actions.py | CandidateEdit、Review、TaskEdit、TaskRead | revision、可空绑定、时区校验 |
+| app/api/auth.py | register、login、me | HTTP Auth 契约 |
+| app/api/meetings.py | create/list/get/patch/delete_meeting、upload_meeting、save_meeting | CRUD 与上传复用 |
+| app/api/actions.py | extract_meeting、extraction_workflow、edit_candidate、confirm、reject、my_tasks | 人工审核入口 |
+| app/api/knowledge.py | ingest、index、search、ask、get_chunk、get_document | RAG HTTP 入口与引用回查 |
+| app/services/access.py | meeting_query、require_meeting | 统一 Creator/Owner 过滤 |
+| app/services/actions.py | require_candidate、check_pending、confirm_candidate、task_query、update_task | 锁、状态、幂等、分配权限 |
+| app/llm/client.py | LLMClient.generate、LLMError | 单 Provider 抽象、错误分类、有限重试 |
+| app/llm/extraction.py | ExtractedItem、Extraction、text_windows、extract | 分窗、严格结构与证据 |
+| app/rag/embedding.py | Embedder.encode、get_embedder | ONNX、prefix、pooling、归一化 |
+| app/rag/chunking.py | chunks | 段落/句界、重叠、字符偏移 |
+| app/rag/service.py | ingest_company、index_meeting、retrieve、company_id | 入库幂等、权限 SQL、cosine |
+| app/rag/answer.py | Answer、Citation、answer_question | context-only、拒答、引用校验 |
+| app/workflow/graph.py | run_extraction、run_confirmation、ExtractionState | 有限有向流程与 SQL 审核边界 |
+| app/workflow/tools.py | ToolContext、execute_tool、tool_schemas | Schema 参数与服务端写授权 |
+| app/web/index.html | api、candidates、tasks、sources | 极简 UI、内存 token、textContent 防注入 |
+| migrations/env.py / versions/ | upgrade、downgrade | 版本化 schema，不 create_all |
+| scripts/audit_alimeeting4mug.py | inspect_archive、audit_record、render_report | P0 原包只读审计 |
+| scripts/clean_split.py | main | 只生成派生 manifest |
+| evaluation/extraction.py | score、evidence_ids | 句级身份、P/R/F1、跨句证据 |
+| evaluation/database.py | isolated_database | 评估数据库隔离与清理 |
+| scripts/evaluate_extraction.py | records、main | 真数据/Provider 或显式空基线 |
+| scripts/evaluate_rag.py | main | 独立合成评估、检索与可选生成指标 |
+| scripts/download_embedding.py | main | 固定 revision、下载重试、SHA manifest |
+| scripts/promote_owner.py | main | 仅本地管理者显式设 Owner |
+| scripts/smoke_compose.py | main | 真实容器/重启验证，合成候选不是模型成功 |
+| scripts/audit_public_repo.py | main | index/history 路径、大文件和已知 Secret 检查 |
 
-## 5. Database Schema（实际实现）
+## 5. Database Schema
 
-仅 meetings 业务表：UUID id、VARCHAR(200) title、TEXT content、source_type（pasted_text/txt/markdown）、status（ready）、TIMESTAMPTZ created_at/updated_at。SQLAlchemy 声明字段和 ORM 行为；PostgreSQL 存储及执行约束；Alembic 负责版本化建表。updated_at 由 ORM onupdate 更新，不是直接 SQL 写入的自动触发器。
+六张业务表 + alembic_version：
 
-0001_create_meetings 已应用开发库与随机测试库；alembic check 验证模型与 schema 一致。没有 create_all，没有 action_items/tasks。
+- users：UUID、唯一 email、display_name、password_hash、is_active/is_owner、created_at。
+- meetings：UUID、creator_user_id FK、title/content、source_type、ready、created_at/updated_at。
+- action_items：meeting_id FK、task、assignee_name、可空 assignee_user_id、due_date_text、evidence、pending/confirmed/rejected、revision。
+- tasks：唯一 source_action_item_id FK、source_meeting_id FK、title、姓名/可空 User、due_date_text/可空带时区 due_date、todo/in_progress/done、时间。
+- company_documents：固定 uuid5、slug、title/content/hash。只从捆绑原创虚构文档目录入库。
+- knowledge_chunks：meeting_id 或 company_document_id（二选一 CHECK）、source_type/title/hash、content、index、字符起止、384维向量、模型标识、时间；source_id 属性统一返回实际来源。
 
-## 6. API Design（实际实现）
+迁移 0001 meetings → 0002 users/ownership → 0003 candidates/tasks → 0004 vector extension/documents/chunks。旧会议 creator 可空以保留历史数据，但只允许 Owner 访问；新会议必然绑定创建者。updated_at 的 ORM onupdate 不等于数据库 trigger。
 
-GET /health；POST/GET /meetings；GET/PATCH/DELETE /meetings/{meeting_id}；POST /meetings/upload。201 表示创建，204 表示删除且无 body；404 不存在，422 输入/编码错误，415 文件类型错误，413 超大文件，503 DB 失败。
+## 6. APIs
 
-pytest 31 项通过，全部 API 测试连接独立 PostgreSQL 测试库。普通测试用外层事务回滚，另有真实跨 Session 提交用例。测试库名由 uuid 生成，finally 仅清理该库，避免误删开发数据。独立 Uvicorn 的 HTTP 冒烟也通过，合成记录已清理。
+根 README 列出完整路由；当前核心分组为 Auth、Meeting、Candidate、Task、Knowledge、Workflow。201 创建、204 删除、401 未认证、403 无权、404 不存在/不可见、409 stale/review冲突、413 超限、415 格式不支持、422 输入错误、502/504 Provider失败、503 依赖未就绪。
 
-参考实现语义：[SQLAlchemy Session](https://docs.sqlalchemy.org/en/20/orm/session_basics.html)、[FastAPI UploadFile](https://fastapi.tiangolo.com/tutorial/request-files/)、[Alembic Migration](https://alembic.sqlalchemy.org/en/latest/tutorial.html)。
+GET /health 不访问数据库，是 liveness。API 所有权从 JWT 得到，不允许任意指定 creator_user_id。PATCH 使用 exclude_unset，不把未提交字段覆盖成 null。
 
-## 7. LLM Provider
+## 7. Authentication
 
-尚未选定或调用真实 Provider。计划通过 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL 配置一个 OpenAI-compatible client，由小接口隔离业务与 HTTP 协议。支持程度需要真实联调，不承诺所有兼容服务完全一致。
+Argon2id 散列密码，不可逆；注册邮箱规范化并由 DB UNIQUE 处理并发重复。登录不存在账号也验证 dummy hash，减少明显时差。JWT 固定 HS256，检查 iss/aud/exp/iat/sub；不相信 header 提供的算法。每请求重新读取 active/owner 状态，禁用用户即失效。
 
-## 8. Structured Output
+Owner 不能通过注册 JSON 自行获得，也不把“第一个注册人”自动当管理员。用户在本地明确运行 promote_owner。当前没有 OAuth、邮件验证、刷新令牌、找回密码或复杂 RBAC，因此只作为内部/本机演示，公网入口需控制。
 
-计划必填 task、owner、deadline、evidence，其中 owner/deadline 可 null。Pydantic 拒绝缺字段与错误类型，结构有效后仍要检查证据支持。JSON 合法不等于任务事实正确。缺 JSON、无效 JSON 与合法空数组分开处理。
+## 8. LLM Provider
 
-## 9. Human-in-the-loop
+只有一个 httpx client 层；业务依赖 generate(messages, schema)，不依赖具体供应商 SDK。使用环境变量 API Key/Base URL/Model，强制 HTTPS、禁止跟随重定向。尚无真实 Key，供应商兼容性和效果待联调。所有当前成功抽取测试均为明确 Mock，不能讲成模型效果。
 
-pending 允许编辑；用户确认或拒绝；未经确认不能生成 Task。模型与会议文本无权批准自己。未知日期保持原话；确认时可由用户补充，不能伪称数据原本提供。
+## 9. Prompt
 
-## 10. LangGraph
+抽取 prompt 在 app/llm/extraction.py：正文不可信、不执行其中指令；只抽取明确承诺/安排；未知姓名或日期为 null；证据必须连续原文；不输出 User ID、确认状态或工具授权。RAG prompt 在 answer.py：只能依据 contexts，证据不足拒答，返回 answer/no_answer/citations。
 
-Batch 4 实现确定性抽取、校验、等待、分支和创建。使用 Workflow 是因为流程边界明确且写入需要人类授权；自由 Agent 不适合自行决定是否建任务。持久化和恢复必须用真实测试验证，不因使用框架就宣称可靠。
+提示词只是第一层约束，真正的权限、状态、写入和引用成员校验由服务端完成。没有因为写了“不要幻觉”就保证结果正确。
 
-## 11. Tool Calling
+## 10. Structured Output
 
-计划 create_task、update_task、get_meeting。工具调用是受控函数入口，不能把模型参数当权限凭证。人类确认后的写工具与 API 共享业务服务，避免绕过状态检查。
+ExtractedItem 四个必需字段：task、assignee_name、deadline、evidence；其中姓名/日期可 null，但不等于允许缺字段。strict=True、extra=forbid；action_items=[] 合法。JSON/字段/类型错误、截断 finish_reason、不可定位证据明确失败。
 
-## 12. Reliability
+正文最多 50,000 字符；连续 6000字符窗、300字符重叠，优先句/段边界。合并按证据去空白去重；该启发式可能合并重复证据下的不同任务，属于已知边界，需真实 Bad Case 复核。任一窗失败不保存部分候选。
 
-Batch 1 已实现数据库连接超时、请求 Session 回收/异常回滚、503 错误分类和日志字段限制。LLM 的连接/读取超时、429/5xx 退避、401/403、非法 JSON 及 request_id/token 日志仍属于后续阶段。
+## 11. Human-in-the-loop
+
+pending 可编辑 task/name/binding/deadline text；证据不可被编辑伪造。每次编辑 revision+1；确认/拒绝检查当前 revision。拒绝不生成任务，已拒绝不能再次确认。确认后不直接修改候选，任务状态通过 Task API 维护。截止时间原话与确认后的日历时间分开；不自动把“周五”推算成某日期。
+
+## 12. Task System
+
+正式任务来源可追溯到候选与会议。Creator/Owner 管理该会议任务；被指派系统用户可看自己的任务并只改 status。未绑定 User 仍显示姓名，不会进入任意同名用户的 My Tasks。轻量 UI 以负责人、标题、日期、状态、来源会议展示，来源点击仍校验权限。
 
 ## 13. Idempotency
 
-尚未实现。核心是数据库 UNIQUE(source_action_item_id) + 确认与任务同事务，不仅在 Python 中先查再写。重复点击与并发请求、数据库失败回滚、Graph 重放均需测试；不宣称跨系统恰好一次。
+confirm_candidate 以会议/候选行锁串行化竞争，再检查状态与 revision；Task.source_action_item_id 唯一约束是数据库最后防线。确认状态和 Task 同一次 commit。真实测试使用两个并发请求，得到同一 ID；注入 INSERT 失败后候选仍 pending、Task 为零。
 
-## 14. Evaluation
+这是单 PostgreSQL 事务边界内的幂等，不宣称跨供应商/跨系统“恰好一次”。HTTP 超时后客户端可重试确认，已经成功时返回现有 Task。
 
-现有证据是数据审计：442 场、302332 句、1472 个行动 ID、109 场显式空标签；不是模型效果。无 Precision/Recall/F1 实测。未来按句级证据 ID 评估检测，字段级需人工 Gold。先处理 M3298/M8016、冻结 clean split；不要在 Test1 调提示词。长会议需要覆盖策略，不得静默截断后报告全场 Recall。
+## 14. RAG
 
-## 15. Bad Cases
+两种正式来源：原创企业文档与用户实际创建/授权的会议。12份虚构资料涉及 HR、差旅、远程办公、发布、Review、Incident、部署、会议跟进、升级、Alpha/Beta、安全边界。每份有 Synthetic 标记、版本和生效日期。
 
-目前没有模型输出，也没有模型失败集。P0 已记录 Train M1989 的背景式正例、M0099 的含行动线索空标签，属于标注复核候选，不是已证实错标或模型 Bug。以后保存真实失败预测、配置、来源、原因和人工结论；公开版脱敏与许可审核。
+公司文档由 Owner 触发 ingestion，固定 slug→uuid5，重复入库替换同源 chunks；会议索引先计算向量，保存前锁定复查版本。会议更新时同事务删除旧 chunks，删除会议由 FK cascade 清理。AliMeeting 的原包、processed 和评测预测没有 ingestion 路径。
 
-## 16. Deployment
+## 15. Embedding
 
-尚未部署。计划 CPU Linux + FastAPI + PostgreSQL + Docker Compose，练习 SSH、环境变量、持久卷、端口、日志、重启。本地 PostgreSQL Compose 已启动并验证，持久卷保留；应用尚未容器化。无服务器购买、登录或云部署记录。API Key 与账号操作由用户负责。
+基模型 intfloat/multilingual-e5-small；固定 Xenova ONNX int8 导出 revision 761b726dd34fb83930e26aab4e9ac3899aa1fa78，文件 118,308,185 bytes，模型 SHA f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193。384维，query:/passage: 前缀；attention mask mean pooling，再 L2。CPU 两线程、8条一批，不静默截断超过512 token文本。
 
-## 17. Issues & Fixes
+模型使用方法依据 [原模型卡](https://huggingface.co/intfloat/multilingual-e5-small)；下载的是 [ONNX 导出](https://huggingface.co/Xenova/multilingual-e5-small)。中文/英文可用不代表每个领域都优质，需要评估。
 
-见 issues_and_fixes.md：泄漏风险、旧文档过时、Docker 服务不可连接、报告原文发布风险。只记录真实现象；尚无应用 Bug 修复记录。
+## 16. pgvector
 
-## 18. Git Workflow
+PostgreSQL 16.16 + pgvector 0.8.7，Vector(384)，cosine distance。当前小语料做精确排序，未建 HNSW，不冒充百万级性能。关键 SQL 先过滤模型版本及 company/授权 meeting，再 ORDER BY distance/LIMIT，不能先全局 Top-K 后掩盖越权项。
 
-本地 main 已有 d753085 安全基线，Batch 1 在 feature/backend-foundation 实现并提交。未建立 Remote/PR/CI，远程操作待确认。面试只能展示从实施日起真实记录。
+source_type、source_id、chunk_id、字符起止支持回查。GET chunk 对会议来源再授权。答案引用 ID 必须属于本次返回集合、quote 必须包含于片段；引用合法不保证生成语义完全蕴含，人工检查仍必需。
 
-## 19. AI 与人工分工
+## 17. LangGraph
 
-本轮用户明确目标与约束；AI 读取全部项目文本、运行 P0 全量复核、检查本地环境和 Git、编写四份新文档。Batch 1 由 AI 实现后端/迁移/测试并执行本地验证，生成被忽略的本机开发随机密码。用户负责需求边界和验收，下一步亲自检查 Swagger 与数据库。未来部署/凭据/Bad Case 复核仍需用户参与，不声称用户手写了 AI 生成代码。
+run_extraction 构造 START→load_meeting→extract_and_validate→可选 retrieve_knowledge→save_candidates→human_review_boundary→END。采用简单正则判断是否需要知识参考，不把每场安排都变成 RAG。
 
-## 20. 当前可诚实使用的面试表达
+SQL 中 pending 候选是持久人机交接状态；服务端不使用进程内 InMemorySaver 冒充持久恢复，也未使用 LangGraph interrupt/checkpointer API。确认请求触发独立 run_confirmation，从数据库重新验证再调用写工具。真实测试重建整个 FastAPI app 后仍可查看 pending、确认同一候选。普通 Meeting CRUD 不包装成 Graph。
 
-“项目完成了 442 场会议的数据审计，以及 FastAPI + PostgreSQL 后端，支持会议 CRUD 和文本上传，用 Alembic 管理表结构，31 项真实 PostgreSQL 测试通过。下一步接入云 LLM 结构化抽取；人工确认和部署尚未实现。”
+## 18. Tool Calling
 
-完成 Batch 3、真实评估和部署后再更新介绍。最终 Cheatsheet 在 Batch 7 编制，不提前填入不存在的效果、Bug 或上线成果。
+get_meeting、search_knowledge、create_task、update_task 均有 Pydantic 参数 Schema 和服务端 ToolContext。当前是**确定性工作流调用工具**，不是模型自由决定工具序列，也未声称已验证供应商 function calling。
 
-## 新主线增量：Authentication（已实现）
+写工具要求由认证人工操作创建的 human_approved 上下文；这个字段不在模型参数 schema，注入 human_approved=true 会被拒绝。create_task 仍执行所有权、版本、状态、事务与唯一约束，不仅检查一个布尔值。
 
-单公司多用户；app/models/user.py 的 User 保存 email、Argon2id password_hash、is_active/is_owner。app/core/security.py 的 current_user() 校验固定 HS256、issuer/audience/exp/iat/sub，并重新查询用户状态；create_token() 颁发限时 JWT。app/api/auth.py 的 register/login/me 暴露接口，客户端不能指定 Owner。app/services/access.py 的 meeting_query/require_meeting 将权限约束用于列表和对象访问，非本人返回 404 防枚举。
+## 19. Reliability / Cost
 
-scripts/promote_owner.py 由本地管理员显式提升已注册用户；运行 `uv run python -m scripts.promote_owner --email ...`。不可在模型工具中调用。迁移 0002_auth 保留旧会议为空 creator，普通用户不可访问。tests/test_auth.py 覆盖重复注册、无效登录/JWT、禁止自提权、跨用户访问和禁用账户。
+默认 connect=5s/read=30s/最多3次；429/5xx/传输错误有限退避；Retry-After 数字或HTTP日期可用，单次睡眠封顶10s。401/403/400、非法结构不盲目重试；Response finish_reason 非 stop 视为不完整生成。
 
-## 新主线增量：Extraction / Review / Tasks（已实现）
+请求 UUID、user_id/meeting_id/model、延时、状态、错误类型、token usage 结构化记录。input/output/total 仅接受供应商非负整数；无可靠定价时 estimated_cost=null。会议正文、API Key、密码、SQL参数和供应商原始失败响应不进日志。失败事件 ERROR；普通事件 INFO。
 
-app/llm/client.py 的 LLMClient.generate() 只封装兼容 API，app/llm/extraction.py 的 extract()/text_windows() 分窗覆盖、严格 Pydantic 校验、证据必须为原文连续片段；超过 50000 字符明确返回 413，不静默截断。未知负责人只保留 assignee_name，与系统用户不同。
+成本来自每场会议分窗数×输入/输出 token、重试和每天处理量；重叠窗会重复计费。当前没有真实账单/吞吐/成本数据，不能估造“每天多少钱”。
 
-app/api/actions.py 的 extract_meeting() 网络调用前释放事务，保存时重新锁定会议检查正文和并发结果。ActionItem 状态 pending/confirmed/rejected；CandidateEdit/Review 使用 revision 防止旧页面确认。app/services/actions.py 的 confirm_candidate() 先权限校验和行锁，同事务写确认与 Task，UNIQUE(source_action_item_id) 防并发重复。失败由请求 Session rollback，不留下已确认但无 Task 的状态。已有候选的会议不能改正文或删除，避免证据失效。
+## 20. Evaluation
 
-Task 使用 assignee_user_id 可空 + assignee_name，/tasks/my 只返回绑定到当前 User 的任务。被指派用户可看自己任务并修改 status，不能改标题/负责人，也不因分配任务获得整个会议访问权。会议 Creator/Owner 可管理完整任务。
+P0 真数据 442 场、302332句、1472行动 ID、109显式空标签。clean_split.py 保留 raw，仅派生排除 Train M3298（Dev M8016 有40长句重合，相似度0.877），得到 Train294/Dev65/Test1 82。
 
-关键文件：app/models/action_item.py（ActionItem/Task）；app/schemas/actions.py（CandidateEdit/Review/TaskEdit）；migrations/versions/0003_actions_tasks.py；tests/test_actions.py（审核、权限、并发/事务）；tests/test_llm.py（成功/非法 JSON/错误字段/timeout/429/5xx/401/403）。实际云端调用未执行，所有模型结果明确来自 Mock。
+句级评估身份为 (meeting_id,sentence_id)，跨句证据映射所有重叠句，合并重复编号；失败调用算空预测不删样本，分母为零记0。全空基线 Dev65：TP0/FP0/FN222、P/R/F1=0，只验证评分代码，不能当成 LLM 失败或成功成绩。缺字段级 Gold，assignee/deadline/task Accuracy 不计算。
+
+RAG25题含事实、混淆、跨文档、3场合成历史会议、3无答案题。22个有答案题：Hit@5=1、Recall@5=1、MRR=0.893939。Citation/Source Accuracy、No-answer Accuracy 因无真实 Key 为 null。小型自编集不能外推真实业务。脚本在随机独立 PG 库运行并清理，不污染开发库。
+
+## 21. Bad Cases
+
+outputs/evaluations/rag/bad_cases.jsonl 保留4个非首位命中的排序弱项（Top-5仍覆盖）；不是4个错误答案。extraction_empty_baseline/bad_cases.jsonl 保留全空策略漏检的55场正例会议，用于检查计分链路，不冒充模型失败。
+
+原 P0 的 M1989 背景式正例、M0099 含行动线索空标签是人工标注复核候选，尚未证明错标。真实云 LLM 失败案例仍待 API Key 与人工抽查；不得从 Mock 样例编造生产事故。
+
+## 22. Docker
+
+Dockerfile 使用官方 Python3.13 + 固定 uv0.10.12、uv sync --frozen --no-dev，非root运行。Compose 含 API 和 PG+pgvector，模型只读挂载，PG 命名卷，healthcheck，两服务端口仅loopback。
+
+真实 Compose 冒烟执行注册/CRUD/上传/CPU检索、重启、pending保留、确认幂等/MyTasks。任务候选来自明确的合成 fixture，不是假的 LLM 成功。临时用户/会议已删除，12份虚构制度保留。备份 pre_pgvector.dump 在忽略的 outputs/checks，不公开。
+
+## 23. Server Deployment
+
+尚未购买或登录服务器，未部署云端、域名、Nginx/HTTPS。docs/DEPLOYMENT.md 给出 SSH tunnel、随机环境变量、持久卷、备份和验证步骤。服务器、SSH、DNS与真实付费操作需要用户，不自动代购。
+
+## 24. Git Workflow
+
+基础版 d753085/e8ed364/537953e 真实保留；复验后 main 合并。feature/auth 的 f431b78、feature/extraction-review-tasks 的 317248d 经过测试后本地合并。RAG/Workflow/Evaluation/Deployment 后续提交以 git log 为准。无 Remote/PR，不伪造团队协作记录。CI 文件仅准备，远程运行待 GitHub 建立后验证。
+
+## 25. Issues & Fixes
+
+详见 issues_and_fixes.md。真实问题包括跨划分泄漏、旧路线过时、Docker socket权限、uv缓存/网络、HTTPS CA、日志级别回归、基础镜像下载/标签错误、浏览器预览连接与首屏执行上下文。能解释现象、证据、修复和边界，不编造“线上事故”。
+
+## 26. AI vs Human Contribution / 教学顺序
+
+AI：读取与验证旧资产、编写大部分实现、迁移/测试、构造原创合成集、运行真实 PG/CPU RAG/Compose、更新文档。用户：制定业务边界、提供 API/账号/服务器、做真实模型与 Bad Case 复核、最终讲解和演示。没有统计代码贡献比例，不把 AI 代码声称为本人逐行手写。
+
+建议教学顺序：先在UI/Swagger跑用户→会议→候选→任务（云调用前需Key）；再读 current_user/require_meeting；用两次确认解释事务与唯一约束；看 retrieve 的 SQL 权限；再解释 Graph 的持久人工边界；最后读评估报告的 null/局限与部署状态。面试只说已实现和已测事实，速查见 INTERVIEW_CHEATSHEET，证据分类见 RESUME_EVIDENCE。

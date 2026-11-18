@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+.venv
+models
+outputs
+data/raw
+data/processed
+data/annotations
+__pycache__
+**/__pycache__
+.pytest_cache
+*.key
+*.pem
+.DS_Store
+work

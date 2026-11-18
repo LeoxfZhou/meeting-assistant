@@ -1,0 +1,25 @@
+{"id": "q01", "type": "factual", "question": "国内普通城市住宿报销上限是多少？", "expected_sources": ["travel-expense"], "expected_answer_points": ["每晚450元"]}
+{"id": "q02", "type": "confusing", "question": "上海出差住宿和餐补上限分别是多少？", "expected_sources": ["travel-expense"], "expected_answer_points": ["每晚550元", "每天80元"]}
+{"id": "q03", "type": "factual", "question": "出差结束多久内提交报销？", "expected_sources": ["travel-expense"], "expected_answer_points": ["10个工作日"]}
+{"id": "q04", "type": "factual", "question": "远程办公每周最多几天，协作时间是什么？", "expected_sources": ["remote-work"], "expected_answer_points": ["2天", "北京时间14:00至17:00"]}
+{"id": "q05", "type": "confusing", "question": "远程设备补贴和上海住宿上限分别是多少？", "expected_sources": ["remote-work", "travel-expense"], "expected_answer_points": ["设备每年1500元", "上海每晚550元"]}
+{"id": "q06", "type": "factual", "question": "连续年假超过五个工作日谁批准？", "expected_sources": ["hr-policy"], "expected_answer_points": ["部门负责人"]}
+{"id": "q07", "type": "factual", "question": "常规发布在哪些时间窗口？", "expected_sources": ["release-process"], "expected_answer_points": ["周二和周四", "16:00至18:00"]}
+{"id": "q08", "type": "cross_document", "question": "P1紧急修复能否绕过常规发布窗口，审批者是谁？", "expected_sources": ["release-process", "incident-response"], "expected_answer_points": ["可以", "Incident Commander"]}
+{"id": "q09", "type": "confusing", "question": "普通 PR 和鉴权 PR 各需要几位批准？", "expected_sources": ["code-review"], "expected_answer_points": ["普通一位非作者", "鉴权两位且一位模块负责人"]}
+{"id": "q10", "type": "confusing", "question": "P1 与 P2 的响应时间分别是多少？", "expected_sources": ["incident-response"], "expected_answer_points": ["P1五分钟", "P2三十分钟"]}
+{"id": "q11", "type": "cross_document", "question": "P1在三十分钟后仍未恢复应找谁？", "expected_sources": ["incident-response", "escalation"], "expected_answer_points": ["Incident Commander", "工程负责人"]}
+{"id": "q12", "type": "factual", "question": "P1恢复后多久完成复盘？", "expected_sources": ["incident-response"], "expected_answer_points": ["2个工作日"]}
+{"id": "q13", "type": "factual", "question": "发布后什么条件触发停止扩大流量？", "expected_sources": ["deployment-sop"], "expected_answer_points": ["5分钟内错误率超过2%"]}
+{"id": "q14", "type": "cross_document", "question": "发布前的代码审查和数据库备份要求有哪些？", "expected_sources": ["code-review", "deployment-sop"], "expected_answer_points": ["非作者批准", "备份并核验可读"]}
+{"id": "q15", "type": "factual", "question": "AI行动项可以直接成为正式任务吗？", "expected_sources": ["meeting-followup"], "expected_answer_points": ["不能", "人工负责人确认"]}
+{"id": "q16", "type": "factual", "question": "会议负责人未注册时如何处理？", "expected_sources": ["meeting-followup"], "expected_answer_points": ["保留文本姓名", "用户ID可空"]}
+{"id": "q17", "type": "confusing", "question": "Alpha与Beta的目标指标有什么不同？", "expected_sources": ["project-alpha", "project-beta"], "expected_answer_points": ["Alpha Recall@5至少0.85", "Beta字段完整率至少0.95", "都是目标非实测"]}
+{"id": "q18", "type": "factual", "question": "被分配任务会自动获得整场会议权限吗？", "expected_sources": ["security-customer"], "expected_answer_points": ["不会"]}
+{"id": "q19", "type": "historical_meeting", "question": "Alpha是哪次会议决定延期，新的日期是什么？", "expected_sources": ["meeting:alpha-review"], "expected_answer_points": ["2026-11-12评审", "2026-12-20"]}
+{"id": "q20", "type": "historical_meeting", "question": "最近Alpha会议列出的上线风险有哪些？", "expected_sources": ["meeting:alpha-review"], "expected_answer_points": ["权限测试缺口", "专有缩写歧义"]}
+{"id": "q21", "type": "historical_meeting", "question": "Beta评审中谁负责补齐验收样本，何时完成？", "expected_sources": ["meeting:beta-review"], "expected_answer_points": ["周宁", "2026-11-25"]}
+{"id": "q22", "type": "historical_meeting", "question": "安全例会上对会议索引的要求是什么？", "expected_sources": ["meeting:security-review"], "expected_answer_points": ["先过滤权限", "不能导入AliMeeting评测资料"]}
+{"id": "q23", "type": "no_answer", "question": "公司2027年的年终奖具体发几个月？", "expected_sources": [], "expected_answer_points": ["资料没有规定，拒答"]}
+{"id": "q24", "type": "no_answer", "question": "公司CEO的私人手机号是多少？", "expected_sources": [], "expected_answer_points": ["无资料，拒答"]}
+{"id": "q25", "type": "no_answer", "question": "Project Gamma的正式上线日期是什么？", "expected_sources": [], "expected_answer_points": ["没有Gamma资料，拒答"]}

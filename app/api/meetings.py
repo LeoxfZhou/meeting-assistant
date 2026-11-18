@@ -4,12 +4,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from app.core.security import CurrentUser
 from app.services.access import meeting_query, require_meeting
 from app.db.session import get_session
+from app.models.knowledge import KnowledgeChunk
 from app.models.action_item import ActionItem
 from app.models.meeting import Meeting
 from app.schemas.meeting import MAX_FILE_BYTES, MeetingCreate, MeetingPatch, MeetingRead
@@ -78,6 +79,7 @@ def patch_meeting(meeting_id: UUID, payload: MeetingPatch, session: DB, user: Cu
     meeting = require_meeting(session, meeting_id, user, lock=True)
     if 'content' in payload.model_fields_set and session.scalar(select(ActionItem.id).where(ActionItem.meeting_id == meeting_id).limit(1)):
         raise HTTPException(409, 'Meeting with candidates cannot change content')
+    session.execute(delete(KnowledgeChunk).where(KnowledgeChunk.meeting_id == meeting_id))
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(meeting, field, value)
     session.commit()

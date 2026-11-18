@@ -2,6 +2,7 @@ from alembic import context
 
 from app.core.config import Settings
 from app.db.session import Base, build_engine
+from app.models.knowledge import CompanyDocument, KnowledgeChunk  # noqa: F401
 from app.models.action_item import ActionItem, Task  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.meeting import Meeting  # noqa: F401 - 注册 metadata

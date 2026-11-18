@@ -4,15 +4,19 @@ from uuid import uuid4
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from pathlib import Path
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
+from app.api.knowledge import router as knowledge_router
+from app.rag.embedding import EmbeddingUnavailable
 from app.api.actions import router as actions_router
 from app.llm.client import LLMError
 from app.core.logging import request_context, log_event
 from app.api.auth import router as auth_router
 from app.api.meetings import router
+from app.core.body_limit import RequestBodyLimitMiddleware
 from app.core.config import Settings
 from app.db.session import build_engine
 
@@ -34,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine.dispose()
 
     app = FastAPI(title="Meeting Action Assistant", lifespan=lifespan)
+    app.add_middleware(RequestBodyLimitMiddleware)
     app.state.settings = settings
     app.state.engine = engine
     app.state.session_factory = sessionmaker(engine, expire_on_commit=False)
@@ -53,24 +58,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             request_context.reset(token)
 
+    @app.exception_handler(EmbeddingUnavailable)
+    async def embedding_error(request: Request, exc: EmbeddingUnavailable):
+        return JSONResponse(status_code=503, content={"detail": "Embedding model is not ready; see setup instructions"})
+
     @app.exception_handler(LLMError)
     async def llm_error(request: Request, exc: LLMError):
-        log_event('llm_failure', status='failed', error_type=exc.kind)
+        log_event('llm_failure', status='failed', error_type=exc.kind, model=request.app.state.settings.llm_model,
+                  user_id=getattr(request.state,'user_id',None),meeting_id=request.path_params.get('meeting_id'))
         return JSONResponse(status_code=exc.status_code, content={'detail': exc.kind})
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
         # 异常字符串可能含连接串或正文；仅记错误类型和路由模板。
         route = request.scope.get("route")
-        logger.error("database_failure method=%s route=%s error_type=%s", request.method,
-                     getattr(route, "path", "unknown"), type(exc).__name__)
+        log_event("database_failure", method=request.method, route=getattr(route,"path","unknown"),
+                  error_type=type(exc).__name__, status="failed", user_id=getattr(request.state,"user_id",None))
         return JSONResponse(status_code=503, content={"detail": "Database unavailable"})
+
+    @app.get("/", include_in_schema=False)
+    def home():
+        return FileResponse(Path(__file__).parent / "web" / "index.html")
 
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         # 这是进程存活检查，不伪装成数据库 readiness。
         return {"status": "ok"}
 
+    app.include_router(knowledge_router)
     app.include_router(actions_router)
     app.include_router(auth_router)
     app.include_router(router)
