@@ -81,3 +81,13 @@ def test_answer_citation_and_no_answer():
     for citations in [[{'chunk_id':'other','quote':'周五完成测试。'}],[{'chunk_id':'one','quote':'周六'}],[]]:
         bad=llm(lambda _:response(json.dumps({'answer':'编造','no_answer':False,'citations':citations})))
         with pytest.raises(LLMError): answer_question('何时？',sources,bad)
+
+
+def test_empty_refusal_is_rejected_and_prompt_requires_explanation():
+    sources=[{'chunk_id':'one','content':'Synthetic policy only.'}]
+    def handler(request):
+        payload=json.loads(request.content)
+        assert 'answer 必须是非空字符串' in payload['messages'][0]['content']
+        return response(json.dumps({'answer':'','no_answer':True,'citations':[]}))
+    with pytest.raises(LLMError,match='invalid_structured_output'):
+        answer_question('No supported answer',sources,llm(handler))

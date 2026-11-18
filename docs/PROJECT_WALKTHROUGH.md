@@ -1,6 +1,6 @@
 # 中文会议行动助手：可交接教学 Walkthrough
 
-核验日期：2026-11-18。面向没有参与开发的“C老师·项目实战指导”。以下区分已经运行的程序、Mock 验证的外部模型行为、仍待人工的真实模型与云部署。最新范围见 MASTER_GOAL；旧 project-plan 是历史资料。
+核验日期：2026-11-18。面向没有参与开发的“C老师·项目实战指导”。以下区分已经运行的程序、Mock验证的错误行为、小样本真实Provider结果、仍待人工的UI验收与云部署。最新范围见 MASTER_GOAL；旧 project-plan 是历史资料。
 
 ## 1. Business Problem
 
@@ -106,7 +106,7 @@ Owner 不能通过注册 JSON 自行获得，也不把“第一个注册人”�
 
 ## 8. LLM Provider
 
-只有一个 httpx client 层；业务依赖 generate(messages, schema)，不依赖具体供应商 SDK。使用环境变量 API Key/Base URL/Model，强制 HTTPS、禁止跟随重定向。尚无真实 Key，供应商兼容性和效果待联调。所有当前成功抽取测试均为明确 Mock，不能讲成模型效果。
+只有一个 httpx client 层；业务依赖 generate(messages, schema)，不依赖具体供应商 SDK。使用环境变量 API Key/Base URL/Model，强制 HTTPS、禁止跟随重定向。当前 gpt-6-luna 已真实验证Smoke、5类合成抽取和业务链路；默认max_completion_tokens、不发送temperature，旧服务可显式配置max_tokens。其他供应商兼容性不作保证；Mock仅说明错误路径。
 
 ## 9. Prompt
 
@@ -178,13 +178,13 @@ P0 真数据 442 场、302332句、1472行动 ID、109显式空标签。clean_sp
 
 句级评估身份为 (meeting_id,sentence_id)，跨句证据映射所有重叠句，合并重复编号；失败调用算空预测不删样本，分母为零记0。全空基线 Dev65：TP0/FP0/FN222、P/R/F1=0，只验证评分代码，不能当成 LLM 失败或成功成绩。缺字段级 Gold，assignee/deadline/task Accuracy 不计算。
 
-RAG25题含事实、混淆、跨文档、3场合成历史会议、3无答案题。22个有答案题：Hit@5=1、Recall@5=1、MRR=0.893939。Citation/Source Accuracy、No-answer Accuracy 因无真实 Key 为 null。小型自编集不能外推真实业务。脚本在随机独立 PG 库运行并清理，不污染开发库。
+RAG25题含事实、混淆、跨文档、3场合成历史会议、3无答案题。22个有答案题：Hit@5=1、Recall@5=1、MRR=0.893939。完整25题生成指标仍为null；另做6题真实生成子集首轮5/6通过，4道有答案引用有效，2道无答案首轮1道通过，空拒答修复后单题通过。不得混用两个评估范围。小型自编集不能外推真实业务。脚本在随机独立 PG 库运行并清理，不污染开发库。
 
 ## 21. Bad Cases
 
 outputs/evaluations/rag/bad_cases.jsonl 保留4个非首位命中的排序弱项（Top-5仍覆盖）；不是4个错误答案。extraction_empty_baseline/bad_cases.jsonl 保留全空策略漏检的55场正例会议，用于检查计分链路，不冒充模型失败。
 
-原 P0 的 M1989 背景式正例、M0099 含行动线索空标签是人工标注复核候选，尚未证明错标。真实云 LLM 失败案例仍待 API Key 与人工抽查；不得从 Mock 样例编造生产事故。
+原 P0 的 M1989 背景式正例、M0099 含行动线索空标签是人工标注复核候选，尚未证明错标。真实云失败已保存：HTTP400旧max_tokens不支持、无答案answer为空造成Schema错误；后者修复prompt并复测通过。用户人工抽查仍待完成，不把开发失败称为生产事故。
 
 ## 22. Docker
 
@@ -208,4 +208,10 @@ Dockerfile 使用官方 Python3.13 + 固定 uv0.10.12、uv sync --frozen --no-de
 
 AI：读取与验证旧资产、编写大部分实现、迁移/测试、构造原创合成集、运行真实 PG/CPU RAG/Compose、更新文档。用户：制定业务边界、提供 API/账号/服务器、做真实模型与 Bad Case 复核、最终讲解和演示。没有统计代码贡献比例，不把 AI 代码声称为本人逐行手写。
 
-建议教学顺序：先在UI/Swagger跑用户→会议→候选→任务（云调用前需Key）；再读 current_user/require_meeting；用两次确认解释事务与唯一约束；看 retrieve 的 SQL 权限；再解释 Graph 的持久人工边界；最后读评估报告的 null/局限与部署状态。面试只说已实现和已测事实，速查见 INTERVIEW_CHEATSHEET，证据分类见 RESUME_EVIDENCE。
+建议教学顺序：先在UI/Swagger跑用户→会议→候选→任务（本机已配置Key；新环境需自行配置）；再读 current_user/require_meeting；用两次确认解释事务与唯一约束；看 retrieve 的 SQL 权限；再解释 Graph 的持久人工边界；最后读评估报告的 null/局限与部署状态。面试只说已实现和已测事实，速查见 INTERVIEW_CHEATSHEET，证据分类见 RESUME_EVIDENCE。
+
+## 27. 真实Provider联调教学补充
+
+入口 scripts/verify_real_provider.py 的 BudgetTransport.handle_request 在发出请求前落盘计数，响应仅保留安全指标和合成内容；main 分阶段执行抽取、隔离PG业务链路、RAG子集。pytest不自动调用此脚本。18次尝试与用量、失败/复测口径见 REAL_PROVIDER_VERIFICATION.md。
+
+实际发现的max_tokens错误推动LLMClient可配置token参数；RAG拒答为空推动prompt要求非空说明，Schema保持严格。候选确认是用户授权的API自动测试，不是用户UI确认。生产日志新增http_status，依然不记录完整正文或Secret。

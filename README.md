@@ -6,9 +6,9 @@
 
 已实现 Auth/JWT、Meeting CRUD/TXT/MD、云 LLM Client、Candidate Review、幂等 Task/My Tasks、CPU multilingual embedding + pgvector、LangGraph 受控流程、评估脚本、FastAPI/PostgreSQL Compose 和轻量演示页面。
 
-- 71 项 pytest 通过，全部数据库集成使用真实 PostgreSQL；不是 SQLite 替代。
+- 73 项 pytest 通过，全部数据库集成使用真实 PostgreSQL；不是 SQLite 替代。
 - 真实 CPU 检索：25 题合成集（22 有答案），Hit@5=1.0、Recall@5=1.0、MRR=0.893939。规模小且自编，不代表真实企业效果。
-- **尚无真实 LLM API Key，因此抽取质量、生成答案引用准确率和拒答准确率未实测。** Mock 测试只证明程序行为。
+- **已完成 gpt-6-luna 小样本真实验证**：5类合成抽取通过，API确认到Task和Docker真实出站通过。RAG首轮5/6通过，1个空拒答失败修复后单题复测通过；不能当作全量准确率。详见 [真实验证](docs/REAL_PROVIDER_VERIFICATION.md)。
 - Compose 已真实运行及重启验证；没有云服务器部署、GitHub Remote/PR 或远程 CI 成功记录。
 
 ## 快速启动
@@ -56,6 +56,8 @@ uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 18080 --rel
 | JWT_EXPIRE_MINUTES | 默认 60 分钟 |
 | LOG_LEVEL | 默认 INFO；SQL 参数和网络调试日志不输出 |
 | LLM_API_KEY / LLM_BASE_URL / LLM_MODEL | 云端 Generation；未配置时 503 |
+| LLM_TOKEN_LIMIT_PARAMETER / LLM_MAX_COMPLETION_TOKENS | 默认 max_completion_tokens / 4096；旧兼容服务可显式选择 max_tokens |
+| LLM_TEMPERATURE | 默认不发送；仅模型支持时设置 |
 | LLM_CONNECT_TIMEOUT / LLM_READ_TIMEOUT / LLM_MAX_ATTEMPTS | 默认 5秒 / 30秒 / 3次 |
 | POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB / POSTGRES_PORT | Compose 数据库配置；默认本机端口 55432 |
 

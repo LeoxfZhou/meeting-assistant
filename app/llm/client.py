@@ -30,6 +30,11 @@ class LLMClient:
             raise LLMError("provider_not_configured", 503)
         if not s.llm_base_url.startswith("https://"):
             raise LLMError("provider_requires_https", 503)
+        payload = {"model": s.llm_model, "messages": messages,
+                   s.llm_token_limit_parameter: s.llm_max_completion_tokens,
+                   "response_format": {"type": "json_object"}}
+        if s.llm_temperature is not None:
+            payload["temperature"] = s.llm_temperature
         start = time.monotonic()
         attempts = max(1, min(s.llm_max_attempts, 4))
         with httpx.Client(timeout=httpx.Timeout(s.llm_read_timeout, connect=s.llm_connect_timeout),
@@ -40,8 +45,12 @@ class LLMClient:
                 try:
                     response = client.post(s.llm_base_url.rstrip('/') + '/chat/completions',
                         headers={"Authorization": "Bearer " + s.llm_api_key.get_secret_value()},
-                        json={"model": s.llm_model, "messages": messages, "temperature": 0,
-                              "max_tokens": 4096, "response_format": {"type": "json_object"}})
+                        json=payload)
+                    if response.status_code != 200:
+                        log_event("llm_http_error", **self.context, model=s.llm_model,
+                                  http_status=response.status_code, attempts=attempt+1,
+                                  latency_ms=round((time.monotonic()-start)*1000), status="failed",
+                                  error_type="provider_http_error")
                     if response.status_code in {401, 403}:
                         raise LLMError("provider_unauthorized", 502)
                     if response.status_code == 429 or response.status_code >= 500:
@@ -64,7 +73,7 @@ class LLMClient:
                                       {"prompt_tokens", "completion_tokens", "total_tokens"}
                                       and type(v) is int and v >= 0} if isinstance(usage, dict) else {}
                         log_event("llm", **self.context, model=s.llm_model, latency_ms=round((time.monotonic()-start)*1000),
-                                  status="success", token_usage={"input_tokens":safe_usage.get("prompt_tokens"), "output_tokens":safe_usage.get("completion_tokens"), "total_tokens":safe_usage.get("total_tokens")}, estimated_cost=None, attempts=attempt+1)
+                                  status="success", http_status=response.status_code, token_usage={"input_tokens":safe_usage.get("prompt_tokens"), "output_tokens":safe_usage.get("completion_tokens"), "total_tokens":safe_usage.get("total_tokens")}, estimated_cost=None, attempts=attempt+1)
                         return parsed
                 except httpx.ConnectTimeout:
                     error = "connect_timeout"

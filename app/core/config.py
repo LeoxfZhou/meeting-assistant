@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")
     llm_base_url: str = ""
     llm_model: str = ""
+    llm_token_limit_parameter: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
+    llm_max_completion_tokens: int = Field(default=4096, ge=128, le=16384)
+    llm_temperature: float | None = Field(default=None, ge=0, le=2)
     llm_connect_timeout: float = Field(default=5.0, gt=0, le=30)
     llm_read_timeout: float = Field(default=30.0, gt=0, le=120)
     llm_max_attempts: int = Field(default=3, ge=1, le=4)

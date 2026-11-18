@@ -88,3 +88,18 @@ def test_long_windows_cover_and_reject_partial_failure():
         return response('{"action_items":[]}') if len(calls)==1 else response('invalid')
     with pytest.raises(LLMError): extract(text,llm(handler))
     with pytest.raises(LLMError,match='meeting_too_long_for_extraction'): extract('x'*50001,llm(handler))
+
+
+def test_current_and_legacy_generation_parameters():
+    calls=[]
+    def handler(request):
+        calls.append(json.loads(request.content))
+        return response('{"action_items":[]}')
+    client=llm(handler)
+    client.generate([],Extraction)
+    assert calls[-1]['max_completion_tokens']==4096
+    assert 'max_tokens' not in calls[-1] and 'temperature' not in calls[-1]
+    client.settings=client.settings.model_copy(update={'llm_token_limit_parameter':'max_tokens','llm_temperature':0.0})
+    client.generate([],Extraction)
+    assert calls[-1]['max_tokens']==4096 and calls[-1]['temperature']==0
+    assert 'max_completion_tokens' not in calls[-1]

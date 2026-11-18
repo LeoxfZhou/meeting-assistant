@@ -99,3 +99,27 @@ LangGraph 的锁定依赖引入 httpx2 后，Starlette TestClient 使用了新�
 - 排查：get_goal 返回 active 目标指针，完整读取附件，确认完整主线是当前目标。
 - 修复：按附件继续，重写当前状态，保留代码和历史提交，补齐验收及面试文档。
 - 学到什么：恢复任务必须先核验权威目标，不能靠摘要缩小范围。
+
+## MA-013：真实模型拒绝旧生成参数（已修复）
+
+- 现象：gpt-6-luna返回HTTP400，unsupported_parameter=max_tokens，要求max_completion_tokens。
+- 根因：兼容客户端沿用旧参数，Mock未覆盖当前Provider契约。
+- 排查：首条合成请求保存脱敏HTTP/错误字段，对照官方参数文档；不是Key或账单问题。
+- 修复：默认max_completion_tokens，可显式兼容max_tokens；默认省略temperature；增加当前/旧参数回归，真实Smoke和后续链路通过。
+- 学到什么：OpenAI-compatible不代表所有参数跨模型通用；不能凭Mock宣称真实兼容。
+
+## MA-014：真实RAG拒答为空字符串（已修复并单题复测）
+
+- 现象：q24私人手机号问题HTTP200，no_answer=true但answer为空，Pydantic拒绝；首轮和诊断复测均失败。
+- 根因：prompt要求拒答却没明确拒答文本非空，模型输出与min_length=1契约不一致。
+- 排查：仅对合成问题记录脱敏响应，确认不是JSON语法错误或Provider refusal字段。
+- 修复：prompt要求非空说明；保留严格Schema，添加空拒答回归，真实同题复测一次通过。
+- 学到什么：HTTP200不代表业务成功；保留首轮5/6及无答案1/2，不用单题修复结果改写总体指标。
+
+## MA-015：真实请求观测器绕过系统代理（已修复）
+
+- 现象：自定义HTTPTransport首条ConnectTimeout，默认httpx无凭据请求却收到HTTP401。
+- 根因：自定义Transport未继承macOS系统HTTPS代理；不是Provider拒绝Key。
+- 排查：只检查代理是否存在，保持TLS；没有输出凭据。
+- 修复：观测Transport采用getproxies的HTTPS代理；真实请求到达Provider。Docker独立无凭据连通性也验证401。
+- 学到什么：观测工具必须遵循被测客户端网络配置；未收到HTTP不能声称请求已达Provider。
