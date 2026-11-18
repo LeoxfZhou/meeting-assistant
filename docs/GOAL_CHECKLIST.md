@@ -8,7 +8,7 @@
 | 1 | 应用主线 | README/MASTER_GOAL；无训练依赖 |
 | 2 | AI/人工分工 | Walkthrough26；API/账号/服务器与人工评估待用户 |
 | 3 | 自主推进且不伪造 | 本地实现/73测试；无删失败测试，外部未测显式标注 |
-| 4 | 人工检查点 | Key已配置并获限量调用授权；GitHub/服务器仍需人工，未代登录 |
+| 4 | 人工检查点 | Key已配置并获限量调用授权；GitHub人工建库后已复用现有登录；服务器仍需人工 |
 | 5 | 独立环境 | .venv Python3.13.9、pyproject/uv.lock，真实imports/pytest |
 | 6 | P0保留/泄漏 | raw/audits/scripts保留；clean_split manifest已生成 |
 | 7 | 基础验证/合并 | 537953e基础31测试后合main；后续提交可追踪 |
@@ -47,8 +47,8 @@
 | 40 | pytest | 73 passed，真实PG+CPU；外部LLM Mock |
 | 41 | Compose | API+PG，持久卷/healthcheck，compose_smoke真实重启通过 |
 | 42 | Git工作流 | 基础/Auth/Task分支测试后合并；本轮功能完成后本地提交合并 |
-| 43 | GitHub | 无Remote，发布许可/登录待用户；本地index/history扫描 |
-| 44 | CI | .github/workflows/tests.yml已准备；远程CI未执行，待GitHub |
+| 43 | GitHub | Private origin已推送；API确认private=true；index/history扫描155 blobs通过 |
+| 44 | CI | 首次远程Actions44308229328成功，73测试14.73秒；当前PR状态见GITHUB_WORKFLOW |
 | 45 | 云部署 | DEPLOYMENT步骤已写；服务器/SSH待用户，未部署 |
 | 46 | HTTPS | Optional，未执行，DNS/域名需人工 |
 | 47 | 轻量UI | app/web/index.html，真实Chrome注册/会议/索引/检索验证 |
@@ -67,4 +67,4 @@
 
 ## 需要外部证据才能关闭的事项
 
-真实Provider小样本抽取/问答与失败已验证；完整指标和人工字段复核仍待；GitHub Remote/PR/CI；Linux服务器部署与持久化验证。不能用Mock或本机Compose替代这些证据。
+真实Provider小样本抽取/问答与失败已验证；完整指标和人工字段复核仍待；GitHub已接入且CI通过，当前PR见GITHUB_WORKFLOW；Linux服务器部署与持久化验证。不能用Mock或本机Compose替代这些证据。

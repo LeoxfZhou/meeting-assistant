@@ -123,3 +123,11 @@ LangGraph 的锁定依赖引入 httpx2 后，Starlette TestClient 使用了新�
 - 排查：只检查代理是否存在，保持TLS；没有输出凭据。
 - 修复：观测Transport采用getproxies的HTTPS代理；真实请求到达Provider。Docker独立无凭据连通性也验证401。
 - 学到什么：观测工具必须遵循被测客户端网络配置；未收到HTTP不能声称请求已达Provider。
+
+## MA-016：Git未继承系统代理导致远程超时（已解决）
+
+- 现象：git ls-remote经直接连接超时；httpx通过既有系统代理可访问GitHub。
+- 根因：Git命令未自动继承macOS系统HTTPS代理，不能据此推断凭据失效。
+- 排查：只读远程检查、代理存在性与未认证HTTP探测；使用现有代理后远程读取成功。
+- 修复：仅为本次Git子进程设置https_proxy，沿用已有凭据；main push成功，API确认Private，真实CI通过。
+- 学到什么：区分网络与授权；不打印Token、不改全局代理、不为此安装额外CLI。
