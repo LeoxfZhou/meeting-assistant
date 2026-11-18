@@ -1,49 +1,59 @@
 # 项目 Walkthrough（持续更新）
 
-更新：2026-11-18。供后续项目教学和面试使用。当前仅 P0 审计真实实现；下述后端均是设计，不能作为完成能力描述。
+更新：2026-11-18。供后续项目教学和面试使用。当前已实现 P0 与 Batch 1 Backend Foundation。LLM、人工确认、Task 和 LangGraph 仍为后续设计。
 
 ## 1. Business Problem
 
 会议中安排分散，用户需要带证据的候选事项，并控制是否进入正式任务。我们模拟单用户工作流，没有真实企业使用或上线收益数据。
 
-## 2. Architecture
+## 2. Architecture（实际实现）
 
-计划：FastAPI 接收会议 → httpx 云 LLM Client → Pydantic 校验 → PostgreSQL 候选 → Human Review → 事务创建 Task。LangGraph 在 Batch 4 编排这些服务。只有抽取步骤依赖模型，确认与数据库写入由代码控制。
+FastAPI factory → API 路由 → Pydantic 输入校验 → SQLAlchemy Session/Meeting → PostgreSQL。Alembic 单独管理 schema 版本。同步路由与同步数据库足够支撑本机 MVP，避免异步 Session 和多层 Repository 增加讲解成本。
 
-## 3. End-to-End Data Flow
+app/main.py 的 create_app() 创建 Engine、sessionmaker 与路由；lifespan 在退出时释放 Engine。/health 只代表进程可用；数据库错误返回 503，日志仅包含类型与路由模板，防止 SQL 参数泄露。
 
-当前真实链路：只读原始 ZIP → 嵌套 ZIP → Tab CSV 的 content JSON → 字段/标签/重复审计 → Markdown + CSV。
+## 3. End-to-End Data Flow（实际实现）
 
-目标链路：粘贴/上传文本 → 保存 Meeting → 抽取 task/owner/deadline/evidence → pending 候选 → 编辑/拒绝/确认 → confirmed 与 Task 同事务保存 → 跟踪状态。空结果是正常结果；抽取失败不得生成伪任务。
+POST /meetings → MeetingCreate 校验标题/正文 → create_meeting() → save_meeting() → Session.add/commit/refresh → MeetingRead 序列化为 201 JSON。get_session() 为请求提供独立 Session，异常 rollback，结束 close。
 
-## 4. Code Map（现有真实代码）
+GET 使用 select()/Session.get()；不存在返回 404。PATCH 使用 exclude_unset=True，只更新提供字段；拒绝 null/空 PATCH，避免无意覆盖。DELETE 提交后返回空 204。列表按 created_at 与 id 排序，limit/offset 简单分页。
 
-当前只有 scripts/audit_alimeeting4mug.py，没有业务 class。
+上传为 multipart → 扩展名和 MIME 检查 → 最多读取 1 MiB + 1 字节 → UTF-8-sig 解码 → MeetingCreate 再校验 → 同一 save_meeting() 持久化。文件名仅用于推导标题，不作为磁盘路径。文件不永久保留；multipart 解析仍可能使用框架临时缓冲，当前没有公网入口流量限制。
 
-| 函数 | 实际职责 |
-|---|---|
-| main | 解析 archive/report/inventory 参数，协调审计和写出 |
-| sha256_file / sha256_bytes | 文件与内容指纹 |
-| inspect_archive | 检查双层 ZIP、CRC、分隔符与 JSON，汇总会议 |
-| detect_table_delimiter | 从 idx/content 表头识别分隔符 |
-| audit_record | 单会话字段、句子/行动 ID、缺失/null/空标签与 inventory |
-| canonical_id | 统一数字 ID 表示，区别布尔等异常类型 |
-| cross_split_overlaps | 会议 ID 和全文 hash 跨划分精确比较 |
-| cross_split_long_sentence_pairs | 共享长句聚合成跨划分会议对 |
-| example_markdown | 从 Train 选例生成原文窗口，公开时需审查 |
-| render_report | 统计、重复风险、样例和局限说明 |
-| percentile / distribution | 长度分布，不是 tokenizer 统计 |
+P0 真实链路仍为只读 ZIP → 内层 ZIP → Tab CSV/JSON → 数据审计 → 本地报告/清单。
 
-输入：data/raw/cccdbe6d-87c3-4314-908e-f735073412a9.zip。
-输出：outputs/audits/data_audit.md、meeting_inventory.csv。默认运行会重写派生报告；本轮使用 --report/--inventory 临时路径保留原件。后续每 Batch 在此补真实模块/class/function，不把计划路径列为已存在代码。
+## 4. Code Map（全部为真实文件与符号）
 
-## 5. Database Schema
+| 文件 | class/function | 职责 |
+|---|---|---|
+| app/main.py | create_app / health / database_error | factory、存活检查、DB 错误映射 |
+| app/core/config.py | Settings / postgres_only | .env 与环境变量、PostgreSQL URL 校验 |
+| app/db/session.py | Base / build_engine / get_session | ORM 基类、连接池、Session 生命周期 |
+| app/models/meeting.py | Meeting | typed Mapped 字段和数据库约束 |
+| app/schemas/meeting.py | MeetingCreate / MeetingPatch / MeetingRead | 输入输出契约、部分更新 |
+| app/api/meetings.py | create_meeting / list_meetings / get_meeting / patch_meeting / delete_meeting | CRUD 路由 |
+| app/api/meetings.py | upload_meeting / find_meeting / save_meeting | 上传、404 查询和共享创建逻辑 |
+| migrations/env.py | Alembic 执行入口 | 环境配置、metadata、在线/离线迁移 |
+| migrations/versions/0001_create_meetings.py | upgrade / downgrade | 建表与显式回退 |
+| tests/conftest.py | database_url / client | 临时真实 PG 库、迁移、savepoint 隔离、清理 |
+| tests/test_meetings.py | test_crud / test_upload / test_bad_upload 等 | 请求行为与异常验证 |
+| tests/test_meetings.py | test_postgres_schema_and_migration / test_real_commit_persists_between_sessions | 真实 PG schema、迁移差异、跨 Session 提交 |
+| scripts/audit_alimeeting4mug.py | inspect_archive / audit_record / render_report / main | P0 只读原包审计及本地报告 |
+| scripts/audit_alimeeting4mug.py | cross_split_overlaps / cross_split_long_sentence_pairs / example_markdown | 重复检测、Train 样例（不公开报告） |
 
-尚未实现。计划 meetings(id,title,content,meeting_date,timezone,created_at,updated_at)；action_items(id,meeting_id,task,owner,deadline,evidence,status,...)；tasks(id,source_action_item_id UNIQUE,title,assignee,due_date,status,created_at,updated_at)。保留外键和数据库唯一约束；users 暂缓。Batch 1 只建 meetings，Alembic 管理增量。
+## 5. Database Schema（实际实现）
 
-## 6. API Design
+仅 meetings 业务表：UUID id、VARCHAR(200) title、TEXT content、source_type（pasted_text/txt/markdown）、status（ready）、TIMESTAMPTZ created_at/updated_at。SQLAlchemy 声明字段和 ORM 行为；PostgreSQL 存储及执行约束；Alembic 负责版本化建表。updated_at 由 ORM onupdate 更新，不是直接 SQL 写入的自动触发器。
 
-尚无 API。Batch 1 拟实现 /health、/meetings、/meetings/{id}、/meetings/upload。Batch 2 增加抽取和候选读取；Batch 3 加编辑/confirm/reject 和任务接口，具体契约随实现记录。
+0001_create_meetings 已应用开发库与随机测试库；alembic check 验证模型与 schema 一致。没有 create_all，没有 action_items/tasks。
+
+## 6. API Design（实际实现）
+
+GET /health；POST/GET /meetings；GET/PATCH/DELETE /meetings/{meeting_id}；POST /meetings/upload。201 表示创建，204 表示删除且无 body；404 不存在，422 输入/编码错误，415 文件类型错误，413 超大文件，503 DB 失败。
+
+pytest 31 项通过，全部 API 测试连接独立 PostgreSQL 测试库。普通测试用外层事务回滚，另有真实跨 Session 提交用例。测试库名由 uuid 生成，finally 仅清理该库，避免误删开发数据。独立 Uvicorn 的 HTTP 冒烟也通过，合成记录已清理。
+
+参考实现语义：[SQLAlchemy Session](https://docs.sqlalchemy.org/en/20/orm/session_basics.html)、[FastAPI UploadFile](https://fastapi.tiangolo.com/tutorial/request-files/)、[Alembic Migration](https://alembic.sqlalchemy.org/en/latest/tutorial.html)。
 
 ## 7. LLM Provider
 
@@ -67,7 +77,7 @@ Batch 4 实现确定性抽取、校验、等待、分支和创建。使用 Workf
 
 ## 12. Reliability
 
-尚未实现。分层处理连接/读取超时、429/5xx 的有限退避、401/403 的立即失败、非法 JSON；request_id 串联日志，记录 model/meeting_id/latency/status/error_type/token，不记录完整会议和 Key。
+Batch 1 已实现数据库连接超时、请求 Session 回收/异常回滚、503 错误分类和日志字段限制。LLM 的连接/读取超时、429/5xx 退避、401/403、非法 JSON 及 request_id/token 日志仍属于后续阶段。
 
 ## 13. Idempotency
 
@@ -83,7 +93,7 @@ Batch 4 实现确定性抽取、校验、等待、分支和创建。使用 Workf
 
 ## 16. Deployment
 
-尚未部署。计划 CPU Linux + FastAPI + PostgreSQL + Docker Compose，练习 SSH、环境变量、持久卷、端口、日志、重启。Docker CLI 存在但 daemon 当前不可连接；无服务器购买、登录或部署记录。API Key 与账号操作由用户负责。
+尚未部署。计划 CPU Linux + FastAPI + PostgreSQL + Docker Compose，练习 SSH、环境变量、持久卷、端口、日志、重启。本地 PostgreSQL Compose 已启动并验证，持久卷保留；应用尚未容器化。无服务器购买、登录或云部署记录。API Key 与账号操作由用户负责。
 
 ## 17. Issues & Fixes
 
@@ -91,14 +101,14 @@ Batch 4 实现确定性抽取、校验、等待、分支和创建。使用 Workf
 
 ## 18. Git Workflow
 
-当前非 Git 仓库；没有 commit/branch/PR/CI。Batch 1 建安全基线和 feature/backend-skeleton，远程操作待确认。面试只能展示从实施日起真实记录。
+本地 main 已有 d753085 安全基线，Batch 1 在 feature/backend-foundation 实现并提交。未建立 Remote/PR/CI，远程操作待确认。面试只能展示从实施日起真实记录。
 
 ## 19. AI 与人工分工
 
-本轮用户明确目标与约束；AI 读取全部项目文本、运行 P0 全量复核、检查本地环境和 Git、编写四份新文档。未实施后端。后续 AI 负责代码/测试/文档，用户负责凭据、真实部署、评估 Bad Case 复核与核心链路讲解，不声称用户手写了 AI 生成代码。
+本轮用户明确目标与约束；AI 读取全部项目文本、运行 P0 全量复核、检查本地环境和 Git、编写四份新文档。Batch 1 由 AI 实现后端/迁移/测试并执行本地验证，生成被忽略的本机开发随机密码。用户负责需求边界和验收，下一步亲自检查 Swagger 与数据库。未来部署/凭据/Bad Case 复核仍需用户参与，不声称用户手写了 AI 生成代码。
 
 ## 20. 当前可诚实使用的面试表达
 
-“项目已完成中文会议数据审计，核验了 442 场会议并发现一对跨划分内容重合。现在以云 LLM 结构化抽取、人工确认和幂等任务创建为应用主线；后端与部署正在计划中。”
+“项目完成了 442 场会议的数据审计，以及 FastAPI + PostgreSQL 后端，支持会议 CRUD 和文本上传，用 Alembic 管理表结构，31 项真实 PostgreSQL 测试通过。下一步接入云 LLM 结构化抽取；人工确认和部署尚未实现。”
 
 完成 Batch 3、真实评估和部署后再更新介绍。最终 Cheatsheet 在 Batch 7 编制，不提前填入不存在的效果、Bug 或上线成果。

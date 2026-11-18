@@ -18,7 +18,7 @@
 - 解决方式：保留旧文件不改写历史；新增 MASTER_GOAL/PROJECT_STATE 声明替代关系，QLoRA Optional。
 - 学到什么：历史设计、当前目标、实际实现需有独立且明确的入口。
 
-## MA-003：Docker 服务不可连接（待处理）
+## MA-003：Docker 服务不可连接（本轮已恢复验证）
 
 - 现象：docker info 报用户目录下 .docker/run/docker.sock 不存在；Compose 命令可运行。
 - 根因：当前没有可连接的 Docker daemon socket；尚未确认是 Desktop 未启动还是上下文问题。
@@ -33,3 +33,24 @@
 - 排查：读取报告和 example_markdown()，核对 raw ZIP 与发布文件范围。未发生推送或已知泄露。
 - 解决方式：保留本地原件，公开前排除该报告并生成无原文摘要，或在许可明确后审核发布；raw 默认不上传。
 - 学到什么：衍生 Markdown 也可能包含受限内容，不能仅排除 data/raw。
+
+
+### MA-003 本批补充
+
+2026-11-18 复查首次得到 permission denied，不能据此判断 Docker 未启动。获准访问后 docker info 返回 29.8.0；Compose 启动 PostgreSQL 16.16 并 healthy，迁移与测试通过。原先 socket 不存在的状态已变化，本轮遇到的是工具访问限制。不要把权限错误误诊为服务停机。
+
+## MA-005：uv 默认缓存访问与网络限制（已解决）
+
+- 现象：uv python list 在默认缓存报 Operation not permitted；普通环境下载依赖报 DNS 请求失败。
+- 根因：当前执行环境的缓存目录和网络访问边界，不是依赖不兼容。
+- 排查：将 UV_CACHE_DIR 指向本任务临时缓存，使用已安装 Python 3.13.9；获准联网后重试。
+- 解决：成功生成 uv.lock，32 个依赖包安装到 .venv；31 项测试通过。未更改系统 Python。
+- 学到什么：先区分环境权限、网络和代码错误，避免无依据降级依赖。
+
+## MA-006：TestClient 上游弃用提示（未处理，非测试失败）
+
+- 现象：31 passed，出现一条 StarletteDeprecationWarning，提示 TestClient 的 httpx 集成将弃用，建议 httpx2。
+- 根因：当前锁定 FastAPI 0.163.2 / Starlette 1.10.0 的测试适配迁移提示。
+- 排查：核对真实测试输出；请求与数据库断言均通过。
+- 处理：不隐藏警告、不为此扩展本批依赖迁移；保留锁文件，后续兼容性升级时验证替换。
+- 学到什么：测试通过和依赖维护提示要分别记录，不能把警告说成已修复。

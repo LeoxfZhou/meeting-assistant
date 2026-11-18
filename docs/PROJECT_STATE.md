@@ -1,79 +1,68 @@
 # 项目状态
 
-最后核验：2026-11-18（北京时间）。阶段：P0 已完成，本轮方向调整及文档完成，Batch 1 未开始。
+最后核验：2026-11-18（北京时间）。**Batch 1 Backend Foundation 已完成；停止于此，未开始 Batch 2。** 主线仍为 LLM Application / AI Backend / Workflow / Deployment；QLoRA Optional。
 
-## 实际文件与成果
+## 已完成
 
-本轮修改前共有 11 个文件（含 3 个 .DS_Store），10,334,399 bytes。完整业务文件如下：
+- main 安全基线 d753085；当前 feature/backend-foundation；未创建 Remote、Push、PR 或 CI。
+- 独立 .venv，Python 3.13.9；pyproject.toml + uv.lock，uv sync --frozen 可安装。
+- FastAPI factory、Pydantic Settings/Schema、SQLAlchemy 2.x Session、PostgreSQL、Alembic。
+- Meeting CRUD、TXT/Markdown 上传、输入/文件错误处理、503 数据库错误与受限日志。
+- PostgreSQL 集成测试与独立 Uvicorn HTTP 冒烟验证。
+- README、data/README、Walkthrough 和真实问题更新。
 
-- docs/project-plan/README.md、01-准备清单.md、02-项目介绍.md、03-项目思路与实施路线.md：旧路线历史方案，原地保留；不再作为当前执行入口。
-- scripts/audit_alimeeting4mug.py：唯一 Python 脚本，标准库数据审计。
-- data/raw/cccdbe6d-87c3-4314-908e-f735073412a9.zip：10,180,149 bytes，只读。
-- outputs/audits/data_audit.md 与 meeting_inventory.csv：P0 报告、442 场会议清单。
+## API
 
-没有根 README、app、tests、依赖配置、数据库模型、迁移、Dockerfile、CI、训练代码或模型权重。data/processed 尚未建立。现有 README 仅位于 docs/project-plan/。
+| 方法 | 路径 | 成功 |
+|---|---|---|
+| GET | /health | 200，仅 liveness |
+| POST | /meetings | 201 |
+| GET | /meetings | 200，limit/offset |
+| GET | /meetings/{meeting_id} | 200 |
+| PATCH | /meetings/{meeting_id} | 200 |
+| DELETE | /meetings/{meeting_id} | 204 |
+| POST | /meetings/upload | 201，TXT/MD、UTF-8、≤1 MiB |
 
-## 本轮验证
+非法输入 422、不存在 404、不支持文件 415、超限 413、数据库失败 503。
 
-读取全部旧文档和审计脚本，重新解析全部原始数据（外层 ZIP → 三个 ZIP → Tab CSV → JSON），CRC 校验由脚本执行。用 --report/--inventory 指定系统临时目录，避免覆盖已有成果。重建报告与清单均和原文件逐字节一致。
+## 数据库与迁移
 
-原包 SHA-256：666899476df91a0791b3b5e83994463c2a40e83d6d02e2b50cf2d32a556fec70。
+真实数据库 PostgreSQL 16.16 (Debian 16.16-1.pgdg12+1)。仅业务表 meetings，加 Alembic 版本表 alembic_version；没有 action_items/tasks。
 
-| split | 会议 | 句子 | Action IDs | 显式空标签会议 |
-|---|---:|---:|---:|---:|
-| Train | 295 | 213235 | 1014 | 67 |
-| Dev | 65 | 45869 | 222 | 10 |
-| Test1 | 82 | 43228 | 236 | 32 |
-| 合计 | 442 | 302332 | 1472 | 109 |
+meetings：id UUID 主键、title VARCHAR(200)、content TEXT、source_type VARCHAR(20)、status VARCHAR(20)、created_at/updated_at TIMESTAMPTZ。状态只允许 ready；来源约束 pasted_text/txt/markdown；标题/正文非空。updated_at 由 ORM 更新，不是数据库 trigger。
 
-未发现解析失败、未匹配行动 ID；这不代表语义标注完美。M3298/M8016 共享 40 个长句，SequenceMatcher 相似度 0.877，泄漏尚未处理。没有生成新的评估指标。
+Migration：migrations/versions/0001_create_meetings.py，revision 0001_create_meetings，开发库 upgrade head 成功；测试库从空库迁移成功，alembic check 无差异。应用未使用 create_all。
 
-## 当前 API / 数据库 / 测试 / 环境
+Compose 仅 postgres:16-bookworm；容器 meeting-assistant-postgres-1 healthy，绑定 127.0.0.1:55432，持久卷 meeting-assistant_postgres_data。本轮留数据库运行供人工检查；冒烟 Uvicorn 已停止，正式启动命令见 README。镜像使用 16 系列 tag，并非 digest 锁定。
 
-- API：无；FastAPI 尚未安装到项目环境或实现。
-- 数据库：无业务 schema、Alembic migration 或已验证连接。
-- 测试：无 pytest suite；本轮通过的是现有审计脚本的全量复现，不是后端测试。
-- 默认 python3：3.9.10；uv 可用；PATH 未发现 python3.11/python3.12 或 psql。
-- Docker CLI 可用，Compose v5.5.1；docker info 连接失败，用户 Docker socket 不存在，服务未证实启动。
-- 未安装依赖、启动服务、调用付费 API 或访问网络。
+## 测试证据
 
-## 旧路线处置
+- pytest -q：31 passed，3.14s；1 条 Starlette TestClient 对 httpx 的弃用警告，未隐藏。
+- 覆盖 health、CRUD、404、PATCH 部分更新/无效更新、UUID/分页、输入校验、TXT/MD/路径式文件名/BOM 上传、不支持格式、空文件、无效 UTF-8、超限、数据库错误脱敏、真实 schema/migration、跨连接持久化。
+- 数据库错误映射测试使用注入 OperationalError；不将其宣称为真实数据库宕机演练。
+- 所有 API 测试使用随机独立 PostgreSQL 测试库；测试结束已清理，核验残留测试库为 0。
+- 独立启动 Uvicorn 在本机 18080，真实 HTTP health 200、CRUD、TXT/MD 上传全部通过；本轮合成记录已删除，开发库 meetings 行数 0。
+- compileall 与 git diff --check 通过；现有原始 ZIP、P0 报告、清单、审计脚本及旧规划保留不变。
 
-| 内容 | 处置 |
-|---|---|
-| 原始包、P0 脚本、报告、清单 | 完整保留，用于评估和数据工程证据 |
-| 人工确认、证据定位、事务与幂等、未知日期处理 | 保留并作为主线业务规则 |
-| QLoRA、Qwen 1.5B、训练窗口与 GPU 计划 | 降为 Optional，未发现对应实现，无需搬迁 |
-| docs/project-plan/ 四份文档 | 逻辑归档，原地保留；本状态文档声明其已被 MASTER_GOAL 替代 |
-| RAG/pgvector/Embedding、LangSmith、会议问答 | 暂不处理，不作为 MVP 前置 |
-| 一个自由选工具 Agent、复杂状态和多张辅助表 | 改为受控 LangGraph + 三张业务表逐批实现 |
-| GPU 部署、正式微调联调门槛 | 改为云 API + CPU Linux 应用部署 |
+## Git / Public Strategy
 
-## Git 与公开准备
+main 基线提交：d753085 chore: initialize project repository。
+本批提交分为后端实现、集成测试与文档两个有意义的单元；实际 hash 以 git log 为准。开发均在 feature/backend-foundation，最终工作区应无未提交变更；.env/.venv/raw/outputs 等保留本地并忽略。
 
-git rev-parse 返回 not a git repository（本目录及父级未识别 Git 仓库）。未初始化 Git；无 branch、tracked files、commit、remote；未提交更改状态不适用。没有 .gitignore。本轮未创建仓库、分支、提交或 Remote。
+.gitignore 排除 raw/processed/annotations、全部 outputs（含审计原文报告）、.env 与密钥、虚拟环境、数据库文件、缓存。保留纯占位 .env.example。当前随机开发密码只存在被忽略的本机 .env；未加入 Git，日志不打印密码。
 
-已对现有文本文件进行私钥头、常见 Key 和凭据赋值模式扫描，未发现命中；未发现 .env/私钥文件。这只是有限静态检查，不能替代首次提交的暂存区审查。
+GitHub 发布前仍需用户确认 Remote/仓库公开性，复核暂存区、数据来源/许可、Git 作者信息和代码许可证。没有公开授权，不推送；审计报告不能自动放行。
 
-发布前需：
-1. 增加 .gitignore/.dockerignore，排除 raw/processed、私密 outputs、.env（仅放行纯占位 .env.example）、私钥、DB 文件/卷、日志、缓存与模型权重。
-2. 现有 data_audit.md 含 Train 原文，先保留本地；准备不含原文的公开摘要或先确认许可。不可直接 git add . 后推送。
-3. 增加根 README 和 data/README.md，补实际来源/下载时间/版本及许可记录；许可未确认不阻塞合成样例后端开发。
-4. 初始化本目录独立仓库，安全基线提交后进入 feature/backend-skeleton；发布前复核暂存文件、敏感模式和文件大小。
-5. 用户确认 GitHub 账号、仓库名、公开性与 Remote；再建立真实 Issue/PR/CI，不补造历史。
+## 保留的数据资产与已知限制
 
-## 下一 Batch：最小实现计划（待批准）
+P0：Train 295 场/213235 句/1014 行动 ID/67 空标签会议；Dev 65/45869/222/10；Test1 82/43228/236/32。合计 442/302332/1472/109。raw SHA-256：666899476df91a0791b3b5e83994463c2a40e83d6d02e2b50cf2d32a556fec70。
 
-1. 独立 Python 3.11 环境与依赖锁定；建立根 README、data/README、忽略规则和仅占位的 .env.example。核验依赖兼容性后安装，不沿用默认 3.9 作为未经测试的主环境。
-2. Git 安全初始化与 feature/backend-skeleton；GitHub 尚未批准时用本地任务清单，不伪装已创建 Issue/PR。
-3. FastAPI 最小结构：app/main.py、config.py、db.py、models/meeting.py、schemas/meeting.py、api/meetings.py；单一同步 SQLAlchemy Session，避免无必要异步 DB 复杂度。
-4. PostgreSQL 开发实例与首个 Alembic migration，仅 meetings 表。字段建议 UUID id、title、content、可空 meeting_date/timezone、created_at/updated_at。业务需要时再增加 source_hash/revision。
-5. API：GET /health；POST/GET /meetings；GET/PATCH/DELETE /meetings/{id}；POST /meetings/upload 支持 UTF-8 TXT/MD、明确大小上限、空文本拒绝。删除在 Batch 1 无关联记录时实现；Batch 2 增加关联前明确禁止删除或软删除规则。
-6. pytest：创建/列表/读取/更新/删除、404、空白/非法输入、上传大小和编码；用合成会议。以独立 PostgreSQL 测试库验证持久化、事务和 Alembic 空库 upgrade，不用 SQLite 通过冒充 PostgreSQL 验证。
-7. 验收：新环境按 README 启动；迁移成功；CRUD 测试通过；更新状态、Code Map、问题记录，展示真实执行证据。无 Docker/PostgreSQL 时可推进代码但必须标明集成测试未验证。
+M3298/M8016 泄漏风险尚未处理。数据来源/许可仍待确认；不阻塞合成数据后端。旧 project-plan/ 文档原地保留为历史，不作为当前进度。
 
-为便于本地 PostgreSQL，可在 Batch 1 加仅 DB 的开发 Compose；完整应用镜像、生产 Compose 与服务器部署仍属于 Batch 6。Batch 1 不接 LLM、不实现 Task/LangGraph，不要求 API Key 或云服务器。
+文件大小在 multipart 解析后检查，未实现生产入口请求体限流；无 Auth，仅本机开发。此批没有压测、生产部署或宕机演练。默认 Python 3.9.10 未使用；实际独立环境为已有 3.13.9（较早检查只查询了 3.11/3.12，不能据此断言无较新 Python）。
 
-## 已知问题 / 人工事项 / 阻塞
+## 尚未实现 / 下一 Batch
 
-真实问题见 issues_and_fixes.md。本轮无阻塞，已结束。下一阶段需要用户明确批准 Batch 1；真实 PostgreSQL 测试需可用数据库（建议用户启动 Docker Desktop）。后续人工确认数据来源、clean split 策略、云 API 与 GitHub 发布；API Key 不发聊天、不写文档。购买、SSH 登录、验证码、DNS 等到部署阶段处理。
+LLM、Prompt、Action Items、Task、Human Review、LangGraph、Tool Calling、RAG、训练、前端、云部署均未实现。下一 Batch 2：云 LLM Client + Pydantic 结构化抽取 + 候选持久化 + 基础超时/错误处理，须用户另行批准。
+
+用户现在可启动 README 中的 Uvicorn，在 /docs 创建、查询、修改、上传、删除合成会议，并用 psql 查看 meetings 表。
