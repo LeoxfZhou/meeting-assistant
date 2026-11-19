@@ -59,4 +59,12 @@ boot ID从b5801c58-0b2b-472b-aba6-7505d6193958变为a434b186-f13c-41f6-942a-7143
 
 再次核对API/PG healthy，40GiB盘已用7.7GiB，2GiB Swap存在。数据库只有1个合成探针用户、1场Synthetic server persistence probe会议、0候选/Task/企业文档，无唯一业务数据。服务器.env无需保留，用户已授权永久删除Demo。
 
-实际执行compose down（不带-v）：API/PG容器和项目网络删除，但meeting-assistant_postgres_data仍存在。随后up --no-build --pull never --wait，两服务healthy；同一会议ID读取及CPU向量检索通过。原始终端记录位于忽略的outputs/checks/cloud_down_up.log。永久清理尚待执行，不能把本段当成down -v完成。
+实际执行compose down（不带-v）：API/PG容器和项目网络删除，但meeting-assistant_postgres_data仍存在。随后up --no-build --pull never --wait，两服务healthy；同一会议ID读取及CPU向量检索通过。原始终端记录位于忽略的outputs/checks/cloud_down_up.log。永久清理已在下面单独验收。
+
+## 授权永久下线已完成（2026-11-19）
+
+先将部署证据提交0d91cff并push到Private GitHub，然后再次断言数据库恰为1个合成用户、1场既有探针会议、0任务/候选。确认路径不是符号链接后执行指定Compose down -v；仅删除项目容器、network、meeting-assistant_postgres_data、/opt/meeting-assistant（含.env和模型副本）、/root/meeting_probe.py和/root/.meeting-probe.json。没有删除其他项目或执行全局prune。
+
+下线后断言项目容器/网络/卷/目录/探针均不存在；全新SSH会话登录成功，Docker29.1.3仍可用且enabled，Compose2.40.3和2147479552-byte Swap保留，authorized_keys仍在。Ubuntu/SSH/Git/系统软件未卸载。磁盘快照已用8193327104→7979843584 bytes，释放约203.6MiB；保留缓存镜像，不声称清空整个Docker。内存已用约1009→469MiB，仅快照对比。
+
+本项目Demo是有意下线，服务器保留为xyhleo personal server，不删除ECS、不重装系统。以后需要演示请在本机启动；原SSH Tunnel端口不再提供Meeting Assistant服务。公开证据：evaluation/evidence/cloud_validation.json。原始清理终端记录保留本地outputs/checks/cloud_cleanup.log。

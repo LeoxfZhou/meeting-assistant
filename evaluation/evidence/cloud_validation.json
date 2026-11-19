@@ -19,5 +19,25 @@
   "synthetic_users": 1,
   "tasks": 0,
   "candidates": 0,
-  "permanent_cleanup": "not_yet"
+  "permanent_cleanup": "verified",
+  "project_containers_removed": true,
+  "project_network_removed": true,
+  "project_volume_removed": true,
+  "project_directory_removed": true,
+  "project_probe_and_credentials_removed": true,
+  "ssh_reconnected_after_cleanup": true,
+  "docker_enabled_after_cleanup": true,
+  "swap_bytes_after_cleanup": 2147479552,
+  "disk_used_before_bytes": 8193327104,
+  "disk_used_after_bytes": 7979843584,
+  "disk_released_snapshot_bytes": 213483520,
+  "infrastructure_retained": [
+    "Ubuntu",
+    "Docker Engine",
+    "Docker Compose",
+    "Git",
+    "SSH configuration and authorized keys",
+    "2GiB persistent Swap"
+  ],
+  "images": "Cached images retained; no global prune"
 }
