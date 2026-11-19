@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from dotenv import dotenv_values
 
-BLOCKED=('data/raw/','data/processed/','data/annotations/','outputs/','models/','.venv/','postgres-data/','pgdata/')
+BLOCKED=('docs_private/','local_evidence/','data/raw/','data/processed/','data/annotations/','outputs/','models/','.venv/','postgres-data/','pgdata/')
 
 
 def git(*args):

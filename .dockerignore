@@ -14,3 +14,6 @@ __pycache__
 *.pem
 .DS_Store
 work
+
+docs_private
+local_evidence
