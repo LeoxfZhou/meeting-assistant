@@ -131,3 +131,11 @@ LangGraph 的锁定依赖引入 httpx2 后，Starlette TestClient 使用了新�
 - 排查：只读远程检查、代理存在性与未认证HTTP探测；使用现有代理后远程读取成功。
 - 修复：仅为本次Git子进程设置https_proxy，沿用已有凭据；main push成功，API确认Private，真实CI通过。
 - 学到什么：区分网络与授权；不打印Token、不改全局代理、不为此安装额外CLI。
+
+## MA-017：服务器Docker Hub连接超时（已通过镜像传输解决）
+
+服务器Head官方pgvector manifest时报i/o timeout。保留原配置，不使用未知镜像站；本机从官方源构建amd64应用并拉取PG镜像，docker save经SSH加载。服务健康、迁移与CPU检索通过。镜像传输与源码部署可分离，不能为网络问题改用不明来源。
+
+## MA-018：云主机无法直连Provider（待人工网络/Provider选择）
+
+无凭据urllib探测失败，重启后curl直连api.openai.com:443仍在8秒连接上限超时。未收到HTTP，不能称401/配额/Key错误；没有发送密钥。先完成全部无Key部署、迁移、检索与重启验收，再请用户确定可用连接方案和服务器独立配置。
