@@ -30,3 +30,9 @@ README remains recruiter-oriented and retains actual P/R/F1 (4.79%/43.66%/8.64%)
 Full pytest and synthetic RAG reproduction rerun without cloud LLM calls; detailed fresh results recorded below after execution. Dataset audit rerun to separate outputs/checks paths, preserving original evidence. No paid Generation calls made. GitHub PR/CI are the final merge gate. Existing v0.9.0-interview-demo tag must remain at d534c85154bb0e3de108edcaa8d0466f7253fecc; newer MIT/public-audit changes are on main only.
 
 Fresh validation: 82 passed in17.92s; regenerated442-meeting inventory equals preserved P0 inventory; Synthetic RAG report equals frozen evidence (N25/22 answerable, Hit@5=Recall@5=1, MRR0.893939). Current Markdown local-link check found no broken target.
+
+## Public-facing tree cleanup
+
+Internal learning/planning documents were copied to an ignored local directory and SHA256-verified before removal from the current tracked tree. Historical commits, PRs, releases and tags were preserved. Public docs now contain deployment, engineering notes and this audit; benchmark metrics and sanitized reports remain under evaluation/evidence. Transient smoke summaries were preserved locally and removed from the tracked tree. Private directories are also excluded from Docker build context.
+
+Fresh cleanup validation:82 tests passed; dataset inventory and Synthetic RAG report reproduce the frozen evidence; Markdown local links resolve; current/index/history secret scan passed (220 blobs). No paid provider evaluation was performed. DATASET_LICENSE_VERIFIED remains NO; this cleanup does not resolve the prior dataset provenance/terms review.
