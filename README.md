@@ -151,7 +151,7 @@ uv run python -m scripts.report_final_evaluation
 AliMeeting raw ZIP、原文审计、完整预测/坏例不随仓库分发；原始数据未修改。已知Train M3298 / Dev M8016近重复通过派生manifest排除Train项，其他语义重复未穷尽。12份公司资料和3场RAG会议为原创Synthetic/Fictional。
 
 Dataset redistribution license requires manual verification before repository is made public.
-仓库保持Private；公开前需人工核实数据来源/许可、个人元数据与代码许可证。历史Secret扫描只是辅助防线，不是绝对保证。
+仓库保持Private；公开前需人工核实数据来源/许可、个人元数据。历史Secret扫描只是辅助防线，不是绝对保证。
 
 ## Limitations / feature freeze
 
@@ -163,3 +163,11 @@ Dataset redistribution license requires manual verification before repository is
 - 不含ASR/TTS/QLoRA/Multi-Agent，不新增Provider、Nginx/HTTPS或其他功能。后续只接受Bug/Security/Documentation Fix。
 
 [教学Walkthrough](docs/PROJECT_WALKTHROUGH.md) · [面试速查](docs/INTERVIEW_CHEATSHEET.md) · [简历证据](docs/RESUME_EVIDENCE.md) · [当前状态](docs/PROJECT_STATE.md) · [真实问题](docs/issues_and_fixes.md)
+
+## License scope
+
+AliMeeting4MUG raw data is not redistributed in this repository. Users should obtain the dataset from its official source and comply with the original dataset license/terms.
+
+DATASET_LICENSE_VERIFIED = NO. Existing project materials do not establish the applicable dataset license or redistribution permission.
+
+Repository original code and original synthetic company documents: [MIT](LICENSE), Copyright (c) 2026 LeoxfZhou. Third-party datasets, dependencies and model weights retain their respective licenses; MIT does not relicense them.
