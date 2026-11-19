@@ -1,3 +1,5 @@
+> 2026-11-19 更新：真实云基础部署、迁移、CPU检索、容器及整机重启已验证；云端LLM因Provider网络连接超时尚未完成。下方原本地验收/待部署描述为历史快照，以文末云验收记录为准。
+
 # 中文会议行动助手：可交接教学 Walkthrough
 
 核验日期：2026-11-18。面向没有参与开发的“C老师·项目实战指导”。以下区分已经运行的程序、Mock验证的错误行为、小样本真实Provider结果、仍待人工的UI验收与云部署。最新范围见 MASTER_GOAL；旧 project-plan 是历史资料。
@@ -219,3 +221,21 @@ AI：读取与验证旧资产、编写大部分实现、迁移/测试、构造�
 ## 28. GitHub CI 实际链路
 
 .github/workflows/tests.yml 在push/PR触发，Ubuntu runner启动pgvector PostgreSQL服务，安装Python3.13与锁定依赖，下载固定revision的CPU embedding，再运行pytest。测试创建随机独立数据库后清理。CI只用临时数据库/JWT测试值，不上传.env、不配置LLM Key、不调用付费Provider。首次成功run为44308229328，源commit b7cd07e。Git网络需遵循本机已有系统代理；没有改变全局Git设置。
+
+## 2026-11-19 真实Linux部署进展
+
+服务器xyhleo-server：Ubuntu24.04.5 LTS、2vCPU、约1.7GiB可见RAM、40GiB盘；未执行发行版升级。新增2GiB /swapfile-meeting并写fstab，保留原fstab备份。安装Ubuntu仓库Docker29.1.3、Compose2.40.3；UFW仅放行SSH22，SSH密码认证原已禁用。
+
+部署路径/opt/meeting-assistant，源为GitHub main c4aa706（CI success）。服务器Docker Hub连接超时，改为本机官方来源构建linux/amd64镜像，经SSH docker save/load传输；没有复制GitHub凭据或本机.env。服务器独立生成DB/JWT secret，.env权限600。CPU模型4文件SHA256全部一致。
+
+Compose云覆盖：API900MiB、PG450MiB，PG shared_buffers64MB/max_connections30，日志10MiB×3。API/PG healthy，Alembic0004_knowledge(head)，真实注册/登录、会议、CPU向量检索通过；容器重启后同一合成会议仍可读。API检索后约635MiB，PG约41MiB。应用8000与数据库55432只绑定loopback，未开放公网5432。
+
+整机重启验收已完成，详见下文；服务器无凭据连接OpenAI失败，LLM三变量暂空，尚未验证服务器真实云生成，不宣称完整云业务链路成功。
+
+### 整机重启验收完成（2026-11-19）
+
+boot ID从b5801c58-0b2b-472b-aba6-7505d6193958变为a434b186-f13c-41f6-942a-7143b5e3f826；Docker enabled，API/PG自动healthy，2GiB Swap恢复。同一合成会议022a2ba1-d0f3-4401-a24a-ff62cb3d8bfe重启后读取和CPU向量检索通过。未重建或清空命名数据库卷。
+
+部署主机仅SSH公开，应用/DB绑定127.0.0.1。访问方式：`ssh -N -L 18081:127.0.0.1:8000 xyhleo-server`，浏览器打开http://127.0.0.1:18081。云资源已真实部署，但服务器LLM尚未完成：无凭据curl直连api.openai.com:443重复超时（8秒连接上限），不能判断为Key错误。用户需确定服务器可用的合规Provider连接方式，再在服务器/opt/meeting-assistant/.env设置三项LLM变量；不在聊天提交密钥。没有将本机Key复制到服务器或绕过服务访问限制。
+
+当前源代码部署来自已验证Git main归档，不是服务器持有GitHub凭据直接clone。更新需重新传输受审提交/镜像；没有伪造远程clone。compose.cloud.yml记录实际低内存参数。合成验证账户/会议保留用于重启证据，凭据仅服务器/root/.meeting-probe.json（600），不进Git。
