@@ -1,8 +1,6 @@
-> 当前范围：功能冻结与评测封版；云端基础设施已验证，云端 Generation 不属于部署验收范围。
-
 # 中文会议行动助手：可交接教学 Walkthrough
 
-核验日期：2026-11-18。面向没有参与开发的“C老师·项目实战指导”。以下区分已经运行的程序、Mock验证的错误行为、小样本真实Provider结果、仍待人工的UI验收与云部署。最新范围见 MASTER_GOAL；旧 project-plan 是历史资料。
+封版日期：2026-11-19。交给“C老师·项目实战指导”。功能冻结；区分Implemented、Mock Tested、Real API Verified、Measured与Optional。用户仍需亲自讲解和抽查坏例，不把自动API确认称作真人UI点击。
 
 ## 1. Business Problem
 
@@ -61,7 +59,7 @@ CPU Generation 不在本地运行；本地 ONNX 模型只做 Embedding。FastAPI
 | app/services/access.py | meeting_query、require_meeting | 统一 Creator/Owner 过滤 |
 | app/services/actions.py | require_candidate、check_pending、confirm_candidate、task_query、update_task | 锁、状态、幂等、分配权限 |
 | app/llm/client.py | LLMClient.generate、LLMError | 单 Provider 抽象、错误分类、有限重试 |
-| app/llm/extraction.py | ExtractedItem、Extraction、text_windows、extract | 分窗、严格结构与证据 |
+| app/llm/extraction.py | ExtractedItem、LocatedItem、LocatedExtraction、restore_evidence、validated_items、text_windows、extract | 分窗、行号定位、原文重建与有界纠正 |
 | app/rag/embedding.py | Embedder.encode、get_embedder | ONNX、prefix、pooling、归一化 |
 | app/rag/chunking.py | chunks | 段落/句界、重叠、字符偏移 |
 | app/rag/service.py | ingest_company、index_meeting、retrieve、company_id | 入库幂等、权限 SQL、cosine |
@@ -112,13 +110,13 @@ Owner 不能通过注册 JSON 自行获得，也不把“第一个注册人”�
 
 ## 9. Prompt
 
-抽取 prompt 在 app/llm/extraction.py：正文不可信、不执行其中指令；只抽取明确承诺/安排；未知姓名或日期为 null；证据必须连续原文；不输出 User ID、确认状态或工具授权。RAG prompt 在 answer.py：只能依据 contexts，证据不足拒答，返回 answer/no_answer/citations。
+抽取 prompt 在 app/llm/extraction.py：正文不可信、不执行其中指令；只抽取明确承诺/安排；未知姓名或日期为 null；证据起止行由服务端验证并重建连续原文；不输出 User ID、确认状态或工具授权。RAG prompt 在 answer.py：只能依据 contexts，证据不足拒答，返回 answer/no_answer/citations。
 
 提示词只是第一层约束，真正的权限、状态、写入和引用成员校验由服务端完成。没有因为写了“不要幻觉”就保证结果正确。
 
 ## 10. Structured Output
 
-ExtractedItem 四个必需字段：task、assignee_name、deadline、evidence；其中姓名/日期可 null，但不等于允许缺字段。strict=True、extra=forbid；action_items=[] 合法。JSON/字段/类型错误、截断 finish_reason、不可定位证据明确失败。
+ExtractedItem 四个必需字段：task、assignee_name、deadline、evidence；其中姓名/日期可 null，但不等于允许缺字段。strict=True、extra=forbid；action_items=[] 合法。内部LocatedExtraction要求模型提供编号窗口的起止行，服务端validated_items按范围重建原文，再构造对外ExtractedItem。遗留quote只允许唯一的空白恢复，不接受词语改写。越界/不支持证据最多纠正一次，仍失败则整场拒绝。JSON/类型错误、截断finish_reason仍明确失败。
 
 正文最多 50,000 字符；连续 6000字符窗、300字符重叠，优先句/段边界。合并按证据去空白去重；该启发式可能合并重复证据下的不同任务，属于已知边界，需真实 Bad Case 复核。任一窗失败不保存部分候选。
 
@@ -168,25 +166,27 @@ get_meeting、search_knowledge、create_task、update_task 均有 Pydantic 参�
 
 ## 19. Reliability / Cost
 
-默认 connect=5s/read=30s/最多3次；429/5xx/传输错误有限退避；Retry-After 数字或HTTP日期可用，单次睡眠封顶10s。401/403/400、非法结构不盲目重试；Response finish_reason 非 stop 视为不完整生成。
+默认 connect=5s/read=30s/最多3次；429/5xx/传输错误有限退避；Retry-After 数字或HTTP日期可用，单次睡眠封顶10s。401/403/400、非法JSON不盲目重试；证据范围错误允许一次明确的纠正请求（不同于HTTP重试）；Response finish_reason 非 stop 视为不完整生成。
 
 请求 UUID、user_id/meeting_id/model、延时、状态、错误类型、token usage 结构化记录。input/output/total 仅接受供应商非负整数；无可靠定价时 estimated_cost=null。会议正文、API Key、密码、SQL参数和供应商原始失败响应不进日志。失败事件 ERROR；普通事件 INFO。
 
-成本来自每场会议分窗数×输入/输出 token、重试和每天处理量；重叠窗会重复计费。当前没有真实账单/吞吐/成本数据，不能估造“每天多少钱”。
+成本来自每场会议分窗数×输入/输出 token、重试和每天处理量；重叠窗会重复计费。已有真实token和HTTP延迟记录，但没有可靠价格/账单/吞吐数据，不能估造“每天多少钱”。
 
 ## 20. Evaluation
 
-P0 真数据 442 场、302332句、1472行动 ID、109显式空标签。clean_split.py 保留 raw，仅派生排除 Train M3298（Dev M8016 有40长句重合，相似度0.877），得到 Train294/Dev65/Test1 82。
+30场未用于调试的Test1；micro P=0.0479、R=0.4366、F1=0.0864（TP=31 / FP=616 / FN=40）。详细规则、随机种子、原包/清单/代码哈希和复现命令见evaluation/evidence/action_item_evaluation.md。30场分层平衡，每层5场；不是总体效果估计。
 
-句级评估身份为 (meeting_id,sentence_id)，跨句证据映射所有重叠句，合并重复编号；失败调用算空预测不删样本，分母为零记0。全空基线 Dev65：TP0/FP0/FN222、P/R/F1=0，只验证评分代码，不能当成 LLM 失败或成功成绩。缺字段级 Gold，assignee/deadline/task Accuracy 不计算。
+P0：442场、302332句、1472行动ID。已知M3298/M8016近重复排除Train侧，不改raw。最初5场Test1诊断暴露证据改写后全部列入development_exclusions，最终选未调试30场；另用5场Train验证修复。生产分窗函数与API共用，没有评测捷径或人工模糊评分。
 
-RAG25题含事实、混淆、跨文档、3场合成历史会议、3无答案题。22个有答案题：Hit@5=1、Recall@5=1、MRR=0.893939。完整25题生成指标仍为null；另做6题真实生成子集首轮5/6通过，4道有答案引用有效，2道无答案首轮1道通过，空拒答修复后单题通过。不得混用两个评估范围。小型自编集不能外推真实业务。脚本在随机独立 PG 库运行并清理，不污染开发库。
+TP/FP/FN以(meeting_id,sentence_id)定义；真实证据映射所有重叠句，重复原文映射所有出现位置，再按ID去重。失败整场算空预测、空标签保留、零分母记0。这是小规模、分层平衡的诊断评测，不是总体效果估计。AliMeeting缺负责人/日期/标准任务文字Gold，不报告这些字段准确率。严格句级标注与模型行动范围有差异，误报和漏报均保留，不以工程完整性冒充高抽取质量。
+
+Synthetic RAG：25题，22有答案、3无答案；Hit@5=1.0、Recall@5=1.0、MRR=0.893939。全25题Generation未运行；历史6题生成首轮5/6，无答案1/2，修复后该失败题单题通过。 检索复现使用独立PG库；Hit@5=至少一个Gold来源出现在前5片段，Recall@5=覆盖Gold来源比例的题均值，MRR=首个相关片段倒数排名的题均值。3个无答案题不参与检索分母，不能把检索结果当拒答准确率。
 
 ## 21. Bad Cases
 
-outputs/evaluations/rag/bad_cases.jsonl 保留4个非首位命中的排序弱项（Top-5仍覆盖）；不是4个错误答案。extraction_empty_baseline/bad_cases.jsonl 保留全空策略漏检的55场正例会议，用于检查计分链路，不冒充模型失败。
+公开索引evaluation/evidence/action_item_bad_cases.md记录10个真实FP/FN案例，完整Gold/Prediction/Evidence在ignored outputs/evaluations/action_item_bad_cases.md。按错误数确定性选择，包含空标签误报与漏检；原因是待人工复核的假设，不能未经审查断言错标。
 
-原 P0 的 M1989 背景式正例、M0099 含行动线索空标签是人工标注复核候选，尚未证明错标。真实云失败已保存：HTTP400旧max_tokens不支持、无答案answer为空造成Schema错误；后者修复prompt并复测通过。用户人工抽查仍待完成，不把开发失败称为生产事故。
+诊断阶段真实5场证据失败与空白修复仍失败的Train记录分别保留development_v1/v2；最终行号方案的Train Smoke与最终30场分开计费。RAG历史空拒答Schema失败、非首位排序弱项保留原报告。
 
 ## 22. Docker
 
@@ -196,11 +196,15 @@ Dockerfile 使用官方 Python3.13 + 固定 uv0.10.12、uv sync --frozen --no-de
 
 ## 23. Server Deployment
 
-已完成阿里云ECS基础部署、SSH tunnel、迁移、CPU检索及容器/整机重启验证，详见DEPLOYMENT。AI在开发环境真实验证；大陆ECS不要求Generation。当前准备按用户授权下线Demo，保留服务器基础设施。
+中国大陆阿里云ECS：Ubuntu24.04、2vCPU/2GiB、2GiB持久Swap，Docker/Compose、FastAPI/PG+pgvector healthy、迁移0004_knowledge、卷持久化及容器/整机重启恢复均已验证。云端Generation不在部署Scope；AI真实Provider在Mac验证。Demo已按授权永久下线，Docker/SSH/Swap及服务器保留。
+
+GitHub main c4aa706对应业务版本通过受审git archive与官方镜像的SSH传输部署，不是服务器持有GitHub凭据clone。API900MiB/PG450MiB，PG64MB shared_buffers/30连接；仅SSH22公开，API8000与PG55432只绑定loopback。
+
+生命周期：restart保留卷；down删除容器/网络但保留命名卷；up后相同会议仍可读；证据push后down -v永久删除卷。清理前确认只有1合成用户/1探针会议，删除项目目录/.env/专用探针；保留Docker/SSH/Swap与系统。详见DEPLOYMENT及cloud_validation.json。
 
 ## 24. Git Workflow
 
-基础版 d753085/e8ed364/537953e 真实保留；复验后 main 合并。feature/auth 的 f431b78、feature/extraction-review-tasks 的 317248d 经过测试后本地合并。RAG/Workflow/Evaluation/Deployment 后续提交以 git log 为准。此前未配置Remote，因此不补造旧PR。用户建立Private仓库后，b7cd07e首次push已通过真实Actions：73项测试、14.73秒；本轮文档以新分支/真实PR交接，见GITHUB_WORKFLOW。
+基础版与早期本地分支提交原样保留，不伪造旧PR。Private仓库后实际Branch→push→PR→CI→merge：PR#1 GitHub交接、PR#2云部署证据；本轮docs/finalize-interview-demo含证据修复和最终评测/文档/清理。最终PR与CI链接见GITHUB_WORKFLOW。单人AI协作，不声称多人独立Review。
 
 ## 25. Issues & Fixes
 
@@ -222,20 +226,12 @@ AI：读取与验证旧资产、编写大部分实现、迁移/测试、构造�
 
 .github/workflows/tests.yml 在push/PR触发，Ubuntu runner启动pgvector PostgreSQL服务，安装Python3.13与锁定依赖，下载固定revision的CPU embedding，再运行pytest。测试创建随机独立数据库后清理。CI只用临时数据库/JWT测试值，不上传.env、不配置LLM Key、不调用付费Provider。首次成功run为44308229328，源commit b7cd07e。Git网络需遵循本机已有系统代理；没有改变全局Git设置。
 
-## 2026-11-19 真实Linux部署进展
+## 29. Final evaluation code map
 
-服务器xyhleo-server：Ubuntu24.04.5 LTS、2vCPU、约1.7GiB可见RAM、40GiB盘；未执行发行版升级。新增2GiB /swapfile-meeting并写fstab，保留原fstab备份。安装Ubuntu仓库Docker29.1.3、Compose2.40.3；UFW仅放行SSH22，SSH密码认证原已禁用。
+- scripts/finalize_evaluation.py：select冻结分层清单；Observer.handle_request记录请求计数/状态/用量；main先Train Smoke再Test1，逐场落盘可恢复。
+- evaluation/extraction.py：evidence_ids确定性原文重叠定位；score计算TP/FP/FN/P/R/F1。
+- scripts/report_final_evaluation.py：main离线复算保存的预测ID，生成完整本地坏例及无原文公开摘要。
+- evaluation/action_item_development_exclusions.json：五场已用于诊断的Test1，禁止进入最终样本。
+- evaluation/evidence/：可提交证据；outputs/evaluations/：含原文预测的本地证据，不提交。
 
-部署路径/opt/meeting-assistant，源为GitHub main c4aa706（CI success）。服务器Docker Hub连接超时，改为本机官方来源构建linux/amd64镜像，经SSH docker save/load传输；没有复制GitHub凭据或本机.env。服务器独立生成DB/JWT secret，.env权限600。CPU模型4文件SHA256全部一致。
-
-Compose云覆盖：API900MiB、PG450MiB，PG shared_buffers64MB/max_connections30，日志10MiB×3。API/PG healthy，Alembic0004_knowledge(head)，真实注册/登录、会议、CPU向量检索通过；容器重启后同一合成会议仍可读。API检索后约635MiB，PG约41MiB。应用8000与数据库55432只绑定loopback，未开放公网5432。
-
-整机重启验收已完成，详见下文；服务器无凭据连接OpenAI失败，LLM三变量暂空，尚未验证服务器真实云生成，不宣称完整云业务链路成功。
-
-### 整机重启验收完成（2026-11-19）
-
-boot ID从b5801c58-0b2b-472b-aba6-7505d6193958变为a434b186-f13c-41f6-942a-7143b5e3f826；Docker enabled，API/PG自动healthy，2GiB Swap恢复。同一合成会议022a2ba1-d0f3-4401-a24a-ff62cb3d8bfe重启后读取和CPU向量检索通过。未重建或清空命名数据库卷。
-
-部署主机仅SSH公开，应用/DB绑定127.0.0.1。访问方式：`ssh -N -L 18081:127.0.0.1:8000 xyhleo-server`，浏览器打开http://127.0.0.1:18081。云端基础设施验收已完成。大陆ECS连接api.openai.com:443曾超时，但云端Generation现已明确排除在部署Scope之外，不再等待Provider配置；真实AI验证在开发环境完成。没有传输本机Key或绕过访问限制。
-
-当前源代码部署来自已验证Git main归档，不是服务器持有GitHub凭据直接clone。更新需重新传输受审提交/镜像；没有伪造远程clone。compose.cloud.yml记录实际低内存参数。合成验证账户/会议保留用于重启证据，凭据仅服务器/root/.meeting-probe.json（600），不进Git。
+教学演示顺序：看失败案例→解释为何格式成功不等于抽取正确→用句ID手算一个TP/FP/FN→看数据泄漏与开发/测试隔离→演示人工确认幂等→看云端生命周期和主动下线。冻结后不围绕Test1调参。

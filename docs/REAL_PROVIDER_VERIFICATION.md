@@ -1,3 +1,5 @@
+> 历史合成Provider首轮验证，数字只属于该轮，不含后续AliMeeting开发/最终评测；新增用量见evaluation/evidence/run_accounting.json。
+
 # 真实 Provider 验证：2026-11-18
 
 本轮用户明确授权最多约20–30次请求，实际按20次累计上限执行，完成18次生成尝试。所有内容均为原创合成会议/公司资料，AliMeeting云调用为0。模型 gpt-6-luna，官方HTTPS Provider；密钥只来自被忽略的.env，不写入报告或日志。

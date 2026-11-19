@@ -11,7 +11,7 @@
   "mrr": 0.893939393939394,
   "citation_source_accuracy": null,
   "no_answer_accuracy": null,
-  "answer_evaluation": "not_run_requires_key",
+  "answer_evaluation": "not_run_retrieval_only",
   "questions_sha256": "fa7451e6ebe253fe412a77f923e8b8b3a868c41d3f869098603d4914783ab9f1",
   "limitations": [
     "Small self-authored synthetic benchmark; not independent production validation.",

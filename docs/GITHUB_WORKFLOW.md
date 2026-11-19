@@ -21,4 +21,16 @@ Git凭据仅通过已有credential helper在内存使用；不保存或打印Tok
 
 .env、raw/processed、含受限原文的outputs/audits、模型、数据库卷和虚拟环境均不在提交历史中。推送前扫描155个不同blob通过。Private不代表可以随意上传受限数据；公开前仍需许可、个人信息和许可证复核。
 
-尚未完成：CPU Linux Server部署、用户UI人工审核与Bad Case抽查。不要把CI通过写成云部署成功，也不要把AI自审写成多人独立Review。
+历史待办快照（云部署现已完成并计划下线）：用户UI人工审核与Bad Case抽查仍需用户。不要把CI通过写成云部署成功，也不要把AI自审写成多人独立Review。
+
+## 2026-11-19 Finalization（当前状态，取代上方历史待部署项）
+
+- PR #2已合并真实ECS基础设施与重启证据；main 0783cc491ef6对应CI成功。
+- 最终分支：docs/finalize-interview-demo。
+- 修复提交0d91cff：行号证据定位、开发/测试隔离；该提交的远程CI已成功（82项测试）。
+- 2558a48：永久下线证据；此前0d91cff已push，满足删除前证据保存条件。
+- 封版PR：[PR #3](https://github.com/LeoxfZhou/meeting-assistant/pull/3)。包含30场真实评测、文档、安全审查和计划下线。
+- PR当前HEAD检查及merge记录以链接中真实记录为准；自动流程只在最新HEAD CI成功后合并，之后核对本地/远端main一致。
+- Release选择v0.9.0-interview-demo：工程链路可演示，但抽取Precision约4.79%、F1约8.64%，不称生产质量或v1.0。
+
+ECS Demo已按用户授权永久下线；服务器保留。当前无云端Provider配置待办。仓库保持Private，公开许可和历史个人路径审查仍需人工；不自动改可见性或重写历史。

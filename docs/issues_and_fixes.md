@@ -146,7 +146,7 @@ LangGraph 的锁定依赖引入 httpx2 后，Starlette TestClient 使用了新�
 
 预检发现三个LLM变量为空，0次HTTP请求。将配置失败保留outputs/checks/finalization_config_preflight，不计模型评测；用户恢复后继续。脚本新增运行前配置检查，不打印值。
 
-## MA-020：真实口语转写证据与连续原文不匹配（修复中验证）
+## MA-020：真实口语转写证据与连续原文不匹配（行号定位修复已验证）
 
 首轮5场Test1均触发unsupported_evidence；7次HTTP尝试含1次传输失败，真实失败不覆盖。诊断发现换行省略、跨句拼接和改写。用户选择先修复，5场全部退出最终holdout，保留development_v1记录。
 
@@ -155,3 +155,11 @@ LangGraph 的锁定依赖引入 httpx2 后，Starlette TestClient 使用了新�
 ## MA-021：封版复验时本机PostgreSQL未启动（已恢复）
 
 首轮pytest为25通过48连接错误，RAG连接127.0.0.1:55432拒绝；Docker Engine正常但数据库容器未启动。启动既有Compose postgres后73项旧测试全部通过，固定RAG指标复现，无删除失败测试或清空开发库。
+
+### MA-020 后续实际验证
+
+仅空白恢复+一次纠正仍在Train Smoke的2/5场失败，保留development_v2。进一步使用LocatedExtraction：模型返回窗口起止行号，服务端重建连续原文；兼容旧quote仍严格校验，不模糊接受改写。新的5场Train Smoke全部通过结构/证据校验，但句级F1较低，说明定位成功与识别质量不同。最终30场Test1在此版本冻结后才运行。新增范围/空白/歧义/纠正上限测试，总82项通过。
+
+## MA-022：最终AliMeeting真实读取超时（作为评测失败保留）
+
+M3181在一段读取上连续三次ReadTimeout，达到现有重试上限；整个会议按空预测计分，不保留部分候选或删去失败会议。没有为提高成绩修改最终集超时设置或重跑该会议。用量不含供应商未返回的未知usage，费用仍null。

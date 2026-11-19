@@ -1,0 +1,35 @@
+{
+  "meetings": 30,
+  "selected": 30,
+  "model": "gpt-6-luna",
+  "micro": {
+    "tp": 31,
+    "fp": 616,
+    "fn": 40,
+    "precision": 0.04791344667697063,
+    "recall": 0.43661971830985913,
+    "f1": 0.08635097493036212
+  },
+  "failed_meetings": 2,
+  "request_count": 75,
+  "failed_requests": 11,
+  "retry_count": 9,
+  "input_tokens": 301895,
+  "output_tokens": 78886,
+  "total_tokens": 380781,
+  "latency_ms": 1097247,
+  "estimated_cost": null,
+  "manifest_sha256": "556015ad80551699964b67ca51079ccd2d7d0d2513fe54f74b545ce1f2daf367",
+  "archive_sha256": "666899476df91a0791b3b5e83994463c2a40e83d6d02e2b50cf2d32a556fec70",
+  "alignment": "Exact evidence substring; all overlapping sentence IDs at every matching location; set deduplication per meeting. Failed meeting counted empty.",
+  "field_accuracy": null,
+  "source_sha256": "70570a5f808ae1b122458d6f50c2c944e51e182f60ed823797cd73e6663ac189",
+  "population": "30 stratified Test1 meetings, 5 per density/length stratum; not population-weighted",
+  "development_exclusions": [
+    "M2777",
+    "M2992",
+    "M3322",
+    "M2999",
+    "M3229"
+  ]
+}
