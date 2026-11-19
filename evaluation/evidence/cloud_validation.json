@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-19",
+  "scope": "Mainland Aliyun ECS infrastructure only; real generation verified on development Mac",
+  "os": "Ubuntu 24.04.5 LTS",
+  "vcpus": 2,
+  "ram_gib": 2,
+  "persistent_swap_gib": 2,
+  "docker": "29.1.3",
+  "compose": "2.40.3",
+  "migration": "0004_knowledge",
+  "api_health": "healthy",
+  "postgres_health": "healthy",
+  "host_reboot_recovery": true,
+  "container_restart_recovery": true,
+  "down_without_v_retains_volume": true,
+  "up_after_down_same_meeting_retrieval": true,
+  "public_postgres": false,
+  "synthetic_meetings": 1,
+  "synthetic_users": 1,
+  "tasks": 0,
+  "candidates": 0,
+  "permanent_cleanup": "not_yet"
+}

@@ -1,0 +1,29 @@
+{
+  "model": "gpt-6-luna",
+  "generation_attempts": 18,
+  "http_200": 16,
+  "http_400": 1,
+  "connection_timeouts": 1,
+  "usage_reported": {
+    "input_tokens": 12363,
+    "output_tokens": 1491,
+    "total_tokens": 13854
+  },
+  "estimated_cost": null,
+  "smoke_passed": true,
+  "synthetic_extraction_passed": 5,
+  "synthetic_extraction_cases": 5,
+  "workflow_real_provider_passed": true,
+  "confirmation_mode": "user-authorized automated API confirmation; not human UI click",
+  "rag_first_pass_cases": 6,
+  "rag_first_pass_passed": 5,
+  "rag_answerable_citation_valid": 4,
+  "rag_answerable_cases": 4,
+  "rag_first_pass_no_answer_correct": 1,
+  "rag_first_pass_no_answer_cases": 2,
+  "q24_pre_fix_recheck": "failed_empty_answer",
+  "q24_post_fix_recheck": "passed_once",
+  "docker_real_provider_passed": true,
+  "alimeeting_cloud_calls": 0,
+  "limits": "Small synthetic verification, not population accuracy. No complete post-fix RAG rerun. Token counts include failed structured outputs; no reliable pricing used."
+}

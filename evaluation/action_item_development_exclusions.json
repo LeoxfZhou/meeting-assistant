@@ -1,0 +1,10 @@
+{
+  "reason": "First smoke exposed evidence bug; used for diagnosis, excluded from final holdout",
+  "meeting_ids": [
+    "M2777",
+    "M2992",
+    "M3322",
+    "M2999",
+    "M3229"
+  ]
+}

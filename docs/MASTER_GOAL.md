@@ -1,10 +1,21 @@
 # Meeting Action Assistant — MASTER GOAL
 
+## 2026-11-19 Finalization 决策（优先于下方历史规划）
+
+功能冻结，不新增产品能力。当前工作仅为30场 AliMeeting Test1 分层评测、证据固化、README/教学/面试文档、Private GitHub PR/CI及云端 Demo 下线。
+
+AI 功能的真实 Provider 验证在开发环境完成；中国大陆阿里云 ECS 用于验证 Linux / Docker / PostgreSQL / pgvector / persistence / restart / deployment workflow。云端 Generation 不再属于验收目标，不新增 Provider，不绕过地域限制；原“等待云端 OpenAI”检查点关闭。
+
+评测冻结 seed=20261119、30场、6个标签密度/长度层各5场，前5场Smoke包含在总数内；复用生产分段抽取。保留所有真实失败，不调参换样本。raw不改，已排除Train M3298，保留Dev M8016；Test1不用于提示词调试或RAG。
+
+用户已授权删除 /opt/meeting-assistant、该项目容器/网络/PG卷和专用探针；先确认证据已保存到GitHub、云端仅Demo且无唯一数据。保留Ubuntu/Docker/Compose/Git/SSH/Swap及其他项目。仓库保持Private。完成后只接受Bug/Security/Documentation Fix，ASR/TTS/QLoRA/Multi-Agent等不实施。
+
+
 ## 0. 项目位置
 
 继续开发现有项目，不创建 V2 或副本：
 
-`/Users/leozhou/Desktop/ShenLanEdu/NLP_Project/meeting_assistant/`
+`meeting_assistant/`
 
 开始工作前必须阅读并理解现有项目：
 

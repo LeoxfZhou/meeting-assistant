@@ -31,3 +31,5 @@ Train M3298 / Dev M8016 共享 40 句长文本，相似度 0.877。scripts/clean
 本批测试使用代码中明确标记的合成会议，不依赖 AliMeeting 下载或许可结论。
 
 company_docs/ 中12份资料为原创 Synthetic/Fictional，evaluation/中另有3场合成会议和25道RAG题；与AliMeeting评估数据隔离。真实AliMeeting评估需合法取得原包，不由RAG ingestion自动导入。
+
+Dataset redistribution license requires manual verification before repository is made public.

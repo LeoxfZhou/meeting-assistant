@@ -1,4 +1,4 @@
-> 2026-11-19 更新：真实云基础部署、迁移、CPU检索、容器及整机重启已验证；云端LLM因Provider网络连接超时尚未完成。下方原本地验收/待部署描述为历史快照，以文末云验收记录为准。
+> 当前范围：功能冻结与评测封版；云端基础设施已验证，云端 Generation 不属于部署验收范围。
 
 # 项目当前状态
 
@@ -88,6 +88,6 @@ Compose云覆盖：API900MiB、PG450MiB，PG shared_buffers64MB/max_connections3
 
 boot ID从b5801c58-0b2b-472b-aba6-7505d6193958变为a434b186-f13c-41f6-942a-7143b5e3f826；Docker enabled，API/PG自动healthy，2GiB Swap恢复。同一合成会议022a2ba1-d0f3-4401-a24a-ff62cb3d8bfe重启后读取和CPU向量检索通过。未重建或清空命名数据库卷。
 
-部署主机仅SSH公开，应用/DB绑定127.0.0.1。访问方式：`ssh -N -L 18081:127.0.0.1:8000 xyhleo-server`，浏览器打开http://127.0.0.1:18081。云资源已真实部署，但服务器LLM尚未完成：无凭据curl直连api.openai.com:443重复超时（8秒连接上限），不能判断为Key错误。用户需确定服务器可用的合规Provider连接方式，再在服务器/opt/meeting-assistant/.env设置三项LLM变量；不在聊天提交密钥。没有将本机Key复制到服务器或绕过服务访问限制。
+部署主机仅SSH公开，应用/DB绑定127.0.0.1。访问方式：`ssh -N -L 18081:127.0.0.1:8000 xyhleo-server`，浏览器打开http://127.0.0.1:18081。云端基础设施验收已完成。大陆ECS连接api.openai.com:443曾超时，但云端Generation现已明确排除在部署Scope之外，不再等待Provider配置；真实AI验证在开发环境完成。没有传输本机Key或绕过访问限制。
 
 当前源代码部署来自已验证Git main归档，不是服务器持有GitHub凭据直接clone。更新需重新传输受审提交/镜像；没有伪造远程clone。compose.cloud.yml记录实际低内存参数。合成验证账户/会议保留用于重启证据，凭据仅服务器/root/.meeting-probe.json（600），不进Git。

@@ -136,6 +136,22 @@ LangGraph 的锁定依赖引入 httpx2 后，Starlette TestClient 使用了新�
 
 服务器Head官方pgvector manifest时报i/o timeout。保留原配置，不使用未知镜像站；本机从官方源构建amd64应用并拉取PG镜像，docker save经SSH加载。服务健康、迁移与CPU检索通过。镜像传输与源码部署可分离，不能为网络问题改用不明来源。
 
-## MA-018：云主机无法直连Provider（待人工网络/Provider选择）
+## MA-018：云主机无法直连Provider（已按验收Scope关闭）
 
 无凭据urllib探测失败，重启后curl直连api.openai.com:443仍在8秒连接上限超时。未收到HTTP，不能称401/配额/Key错误；没有发送密钥。先完成全部无Key部署、迁移、检索与重启验收，再请用户确定可用连接方案和服务器独立配置。
+
+2026-11-19范围决策：大陆ECS仅验收基础设施，真实Generation在Mac完成；无需新增Provider或处理地区访问限制。
+
+## MA-019：封版评测前本地LLM配置为空（人工恢复）
+
+预检发现三个LLM变量为空，0次HTTP请求。将配置失败保留outputs/checks/finalization_config_preflight，不计模型评测；用户恢复后继续。脚本新增运行前配置检查，不打印值。
+
+## MA-020：真实口语转写证据与连续原文不匹配（修复中验证）
+
+首轮5场Test1均触发unsupported_evidence；7次HTTP尝试含1次传输失败，真实失败不覆盖。诊断发现换行省略、跨句拼接和改写。用户选择先修复，5场全部退出最终holdout，保留development_v1记录。
+
+修复只允许唯一的去空白完全匹配并恢复原始字符；不使用相似度/模糊匹配接受改写。首次失败最多一次LLM证据纠正，仍失败则整场拒绝，绝不静默保留部分候选。Prompt明确保留口语原话并选短连续片段。新增恢复/歧义拒绝/纠正上限测试。最终30场另选未用于调试的Test1；clean Train用于Smoke。
+
+## MA-021：封版复验时本机PostgreSQL未启动（已恢复）
+
+首轮pytest为25通过48连接错误，RAG连接127.0.0.1:55432拒绝；Docker Engine正常但数据库容器未启动。启动既有Compose postgres后73项旧测试全部通过，固定RAG指标复现，无删除失败测试或清空开发库。

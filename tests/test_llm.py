@@ -103,3 +103,48 @@ def test_current_and_legacy_generation_parameters():
     client.generate([],Extraction)
     assert calls[-1]['max_tokens']==4096 and calls[-1]['temperature']==0
     assert 'max_completion_tokens' not in calls[-1]
+
+
+def test_evidence_whitespace_restored_without_fuzzy_matching():
+    from app.llm.extraction import restore_evidence
+    assert restore_evidence('小张负责\n提交报告。', '小张负责提交报告。') == '小张负责\n提交报告。'
+    assert restore_evidence('提交原稿。', '提交修改稿。') is None
+    assert restore_evidence('甲\n乙，甲 乙', '甲乙') is None
+    assert restore_evidence('原文', '') is None
+
+
+def test_evidence_repair_once_and_reject_if_still_unsupported():
+    calls=[]
+    item={'task':'提交报告','assignee_name':None,'deadline':None,'evidence':'改写原文'}
+    def handler(request):
+        calls.append(request)
+        return response(json.dumps({'action_items':[item]}))
+    with pytest.raises(LLMError,match='unsupported_evidence'):
+        extract('原文',llm(handler))
+    assert len(calls)==2
+
+
+def test_evidence_repair_keeps_valid_original_quote():
+    calls=[]
+    def handler(request):
+        calls.append(request)
+        item={'task':'提交报告','assignee_name':None,'deadline':None,'evidence':'原话明天提交报告。' if len(calls)==2 else '错误引用'}
+        return response(json.dumps({'action_items':[item]}))
+    assert extract('原话明天提交报告。',llm(handler)).action_items[0].evidence=='原话明天提交报告。'
+    assert len(calls)==2
+
+
+def test_numbered_evidence_reconstructed_from_source():
+    def handler(request):
+        payload=json.loads(request.content)
+        assert '[L1] 小张负责' in payload['messages'][1]['content']
+        return response(json.dumps({'action_items':[{'task':'提交报告','assignee_name':'小张','deadline':None,'evidence_start_line':1,'evidence_end_line':2}]}))
+    item=extract('小张负责\n提交报告。\n背景。',llm(handler)).action_items[0]
+    assert item.evidence=='小张负责\n提交报告。'
+
+
+@pytest.mark.parametrize('start,end',[(3,2),(1,99),(None,1)])
+def test_invalid_evidence_line_range_rejected(start,end):
+    item={'task':'提交报告','assignee_name':None,'deadline':None,'evidence_start_line':start,'evidence_end_line':end}
+    with pytest.raises(LLMError,match='unsupported_evidence'):
+        extract('会议内容。',llm(lambda _:response(json.dumps({'action_items':[item]}))))

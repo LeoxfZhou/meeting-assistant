@@ -20,3 +20,21 @@ def test_rag_gold_integrity():
     for q in questions:
         assert set(q['expected_sources'])<=available and q['expected_answer_points']
         assert bool(q['expected_sources'])==(q['type']!='no_answer')
+
+
+def test_final_holdout_has_no_development_meetings():
+    rows=[json.loads(x) for x in Path('evaluation/action_item_eval_manifest.jsonl').read_text().splitlines()]
+    selected=[r for r in rows if r['included']]
+    excluded=set(json.loads(Path('evaluation/action_item_development_exclusions.json').read_text())['meeting_ids'])
+    assert len(selected)==30 and len({r['meeting_id'] for r in selected})==30
+    assert not excluded & {r['meeting_id'] for r in selected}
+    assert sorted(r['order'] for r in selected)==list(range(30))
+    assert len({r['stratum'] for r in selected})==6
+    assert all(r['split'].startswith('Test1') and r['seed']==20261119 for r in selected)
+
+
+def test_alignment_repeated_spans_and_empty_predictions():
+    sentences=[{'id':1,'s':'提交报告。'},{'id':2,'s':'背景说明。'},{'id':3,'s':'提交报告。'}]
+    assert evidence_ids(sentences,'提交报告。')=={1,3}
+    assert evidence_ids(sentences,'不存在的引用')==set()
+    assert score({1,3},set())['fn']==2
