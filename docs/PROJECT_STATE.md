@@ -22,10 +22,14 @@ Auth/register/login/me/users；Meeting CRUD/TXT/MD；meetings/{id}/extract与wor
 
 这是小规模、分层平衡的诊断评测，不是总体效果估计。AliMeeting缺负责人/日期/标准任务文字Gold，不报告这些字段准确率。严格句级标注与模型行动范围有差异，误报和漏报均保留，不以工程完整性冒充高抽取质量。 RAG自编小集；无全25题Generation指标。云端Generation明确排除，不再等待云端OpenAI。无生产级入口限流/刷新令牌/密码找回。服务器上已没有Meeting Assistant服务；本机可启动Demo。
 
-Private仓库不自动转Public。Dataset redistribution license requires manual verification before repository is made public. 原文预测/坏例及原P0报告仅本地ignored；需人工确认数据来源/许可、个人元数据和代码许可证。安全扫描不保证检测所有未知Secret。
+Private仓库不自动转Public。Dataset redistribution license requires manual verification before repository is made public. 原文预测/坏例及原P0报告仅本地ignored；需人工确认数据来源/许可、个人元数据。安全扫描不保证检测所有未知Secret。
 
 ## Final artifacts
 
 README；PROJECT_WALKTHROUGH；INTERVIEW_CHEATSHEET；RESUME_EVIDENCE；DEPLOYMENT；issues_and_fixes；evaluation/evidence；本地outputs/evaluations/action_item_*。
 
 下一步仅用户讲解练习、坏例人工复核和可选公开审核。没有下一功能Batch。
+
+## Public release audit
+
+Original code now MIT (2026 LeoxfZhou); current/history checks and minimal fixes recorded in [PUBLIC_RELEASE_AUDIT.md](PUBLIC_RELEASE_AUDIT.md). DATASET_LICENSE_VERIFIED=NO; repository remains Private. Non-secret historical development paths do not justify automatic history rewriting.

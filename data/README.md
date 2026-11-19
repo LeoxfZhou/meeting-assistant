@@ -33,3 +33,11 @@ Train M3298 / Dev M8016 共享 40 句长文本，相似度 0.877。scripts/clean
 company_docs/ 中12份资料为原创 Synthetic/Fictional，evaluation/中另有3场合成会议和25道RAG题；与AliMeeting评估数据隔离。真实AliMeeting评估需合法取得原包，不由RAG ingestion自动导入。
 
 Dataset redistribution license requires manual verification before repository is made public.
+
+## License scope
+
+AliMeeting4MUG raw data is not redistributed in this repository. Users should obtain the dataset from its official source and comply with the original dataset license/terms.
+
+DATASET_LICENSE_VERIFIED = NO. Existing project materials do not establish the applicable dataset license or redistribution permission.
+
+Repository original code and original synthetic company documents: MIT, Copyright (c) 2026 LeoxfZhou. Third-party datasets, dependencies and model weights retain their respective licenses; MIT does not relicense them.
