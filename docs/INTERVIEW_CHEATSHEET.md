@@ -1,84 +1,133 @@
 # 面试速查：中文会议行动助手
 
-日期2026-11-18。只讲真实实现；云模型已做小样本真实验证；GitHub CI已通过，云部署尚未验证。
+2026-11-19 / Feature frozen。项目是工程演示，不是高准确率生产系统；低分、失败、评测边界都要能解释。
 
 ## 30秒介绍
 
-我做了一个中文会议行动助手，用 FastAPI 和 PostgreSQL 接收会议文本，通过云模型客户端产生结构化候选，再由人确认后创建正式任务。重点是人工审核、事务幂等和权限；同时用本地CPU多语言向量模型与pgvector检索公司资料和授权历史会议。当前73项测试及本地Docker验证通过，已验证小样本真实抽取与问答，完整模型指标和云部署尚未完成。
+我做了中文会议行动助手，用FastAPI和PostgreSQL接收会议，通过云模型生成结构化候选，人工确认后才创建任务，并用事务和唯一约束防重复。还集成带权限的CPU E5+pgvector检索和LangGraph受控流程。完成82项测试、30场真实AliMeeting评测，以及阿里云Docker部署、持久化和重启验证；抽取仍有误报，评测结果如实保留。
 
 ## 3分钟介绍
 
-业务场景是一家公司的内部会议跟进。会议里的人不一定有系统账号，截止时间也可能只是“下周五”，所以我把会议姓名、可选的系统用户绑定以及日期原话分开保存，不让模型猜用户ID或直接操作数据库。
+业务模拟一家公司的会议跟进：会议人物可能没注册，截止时间可能模糊，AI不能替人批准。我把Meeting、Candidate、Task分开，名字和系统用户分开，日期原话和人工确定日期分开。
 
-输入支持粘贴和TXT/Markdown，FastAPI负责验证、认证和权限，SQLAlchemy管理会话，Alembic管理结构。云端模型调用被隔离在一个简单客户端里，处理超时、429和5xx的有限重试。输出先经过严格JSON和Pydantic校验，再检查证据确实来自会议。长会议分窗，任一窗失败不保存部分候选。成功路径已真实验证，异常重试仍以Mock回归；尚不能报AliMeeting模型F1。
+请求先经过FastAPI、JWT和权限检查，会议由SQLAlchemy写入PG，Alembic管理结构。长文本使用6000字符窗，模型输出经Pydantic严格校验。真实评测发现模型复述证据时会改写口语和换行，因此修复为编号行选择、服务器重建原文；越界仍拒绝，不用模糊匹配蒙混通过。
 
-候选状态是pending、confirmed或rejected。人可以修改负责人和任务，再带revision确认；确认与写入Task在一个数据库事务里，行锁串行化竞争，来源唯一约束作最后防线。真实并发测试确认两次拿到同一个Task。任务被分配给某个用户并不意味着该用户可以读整场会议。
+候选以pending持久化；用户编辑增加revision。确认时校验权限/版本/状态，在同一事务中创建Task，行锁和唯一约束防重复。LangGraph表达受控步骤与人工交接，工具写权限由服务端决定，不是自由Agent。
 
-RAG有两类来源：12份原创虚构公司文档，以及系统内已授权的历史会议。CPU运行384维多语言E5，PostgreSQL里用pgvector做精确cosine排序，权限过滤在LIMIT之前，引用可以回查片段及来源。LangGraph负责有边界的抽取和可选检索流程；人工等待以数据库pending状态持久化，不维持一个长HTTP请求，也不是自由多Agent。
+RAG来自12份原创虚构资料及授权历史会议，CPU E5产生384维向量，pgvector先权限过滤再TopK，答案引用回查片段。检索和生成分别评测：小型Synthetic集22个有答案题Hit@5为1、MRR约0.894，不能说企业RAG准确率100%。
 
-评估方面保留了442场AliMeeting审计，发现Train/Dev近重复后生成派生clean split，原包不变。小型自编RAG集22个有答案题Hit@5为1、MRR约0.894，但不能外推生产效果。73项测试通过，Compose和重启持久化已验证；下一步是用户抽查真实Provider结果与失败案例，以及在用户准备的CPU服务器部署。
+AliMeeting审计442场，处理已知Train/Dev泄漏，开发诊断样本不进入最终30场。30场未用于调试的Test1；micro P=0.0479、R=0.4366、F1=0.0864（TP=31 / FP=616 / FN=40）。这说明工程链路完整并不代表模型质量已高；保留误报、漏报和失败，未伪造字段准确率。
 
-## 架构与主数据流
+基础设施在阿里云2核2GiBECS验证Docker、PG、卷和重启。真实Provider在Mac，大陆ECS不要求Generation；证据入GitHub后主动删除Demo及专属卷，保留服务器。82项测试，真实PR/CI；后续功能冻结，主要做讲解与坏例复核。
 
-浏览器/Swagger → JWT与权限 → FastAPI Route → Pydantic → Service → SQLAlchemy → PostgreSQL。
+## Architecture / Main Data Flow
 
-会议 → 受控Graph → LLM Client → strict候选+原文证据 → pending → 人工审核 → transaction+UNIQUE → Task。
+Meeting → FastAPI权限 → PG → 受控Graph → LLM/Pydantic/原文证据 → Candidate → Human Review → 事务+UNIQUE → Task。
 
-授权资料 → chunk → CPU E5 → pgvector；问题 → query embedding → 授权SQL TopK → 上下文 → LLM答案 → 引用校验。
+Question → CPU query embedding → 授权pgvector TopK → Context → LLM → Citation/No-answer。
 
-## 五个工程重点
+## 五个技术选择
 
-1. 模型建议与数据库写授权分开，人工确认不可由模型参数伪造。
-2. revision解决过期编辑；事务、锁和唯一约束共同保证确认一致性。
-3. 历史检索与引用回查都执行权限，任务分配不自动扩大会议访问权。
-4. 结构校验、有限重试、错误分类、request_id与脱敏日志，而非静默空结果。
-5. 真实PG测试与可复现评估，Mock、合成集和真实模型效果明确区分。
+1. 云API而非训练主线：优先交付和验证应用。
+2. Pydantic+行号原文重建：结构与来源均有服务端约束。
+3. 人工审核+事务/锁/UNIQUE：模型建议不能直接成为写授权。
+4. LangGraph受控步骤+SQL人工状态：可解释、可重启，不自由操作DB。
+5. pgvector同库权限过滤：小规模简单部署，先用真实评测解释边界。
 
-## 五个真实问题
+## Real Metrics
 
-- Train M3298 / Dev M8016近重复：仅ID/hash检查不够；派生排除训练项，raw不改，其他近重复未穷尽。
-- Docker socket访问被拒：先确认权限边界，不把它误诊成daemon未启动；获准访问后验证healthy。
-- Python HTTPS CA失败：使用httpx可信CA，保持TLS校验，未用verify=False。
-- 错误日志级别回归：失败事件曾为INFO，caplog断言发现；改ERROR并保留测试。
-- 镜像下载超时/标签不存在：分别检查网络和标签，改为官方Python+固定uv两阶段并实际构建。
+30场未用于调试的Test1；micro P=0.0479、R=0.4366、F1=0.0864（TP=31 / FP=616 / FN=40）。这是小规模、分层平衡的诊断评测，不是总体效果估计。AliMeeting缺负责人/日期/标准任务文字Gold，不报告这些字段准确率。严格句级标注与模型行动范围有差异，误报和漏报均保留，不以工程完整性冒充高抽取质量。
 
-这些是开发过程问题，不是“生产事故”。详见 issues_and_fixes.md。
+Synthetic RAG：25题，22有答案、3无答案；Hit@5=1.0、Recall@5=1.0、MRR=0.893939。全25题Generation未运行；历史6题生成首轮5/6，无答案1/2，修复后该失败题单题通过。
 
-## 指标与部署速记
+82 pytest通过；最终评测75次HTTP尝试，2场失败；用量/重试详见evaluation/evidence，estimated_cost=null。
 
-AliMeeting：442场、302332句、1472行动ID、109显式空标签；clean split294/65/82。Dev65全空基线TP0/FP0/FN222、P/R/F1=0，只验证评分工具。负责人/日期字段无可靠Gold，不能报Accuracy。
+## 真实Bad Cases速查
 
-RAG：25题，22有答案、3无答案；Hit@5=1、Recall@5=1、MRR=0.893939；4条非首位命中弱项；全25题生成指标未测；6题首轮5/6，空拒答修复后单题通过。自编小集有偏差。
+下表保留ID，完整原文只在本地ignored报告；可能原因需人工复核。
 
-73 tests passed；Compose API/PG healthy，持久卷和重启已测。云服务器、SSH、域名/HTTPS尚未操作；GitHub Actions真实73项通过，14.73秒。公网前需补入口保护并控制注册。
+| Meeting | Sentence | Type | Gold count | Predicted count |
+|---|---:|---|---|---|
+|M4285|304|false_positive|9|102|
+|M4056|413|false_positive|4|64|
+|M3291|3|false_positive|4|52|
+|M3149|3|false_negative|13|41|
+|M3181|93|false_negative|6|0|
 
-## 高频追问与参考回答（28题）
+不能断言所有FP都是幻觉：可能是证据范围过宽或标注口径差异；FN可能是隐含行动、跨窗上下文或整场失败。核心指标不通过人工模糊判定修改。
 
-1. **为什么不先微调？** 目标是交付可运行应用，云Generation降低算力与训练成本，先验证链路与失败边界；QLoRA是独立可选实验。
-2. **模型能不能直接创建任务？** 不能，只产生pending；创建Task只能经认证人工确认及服务层校验。
-3. **为什么区分候选和Task？** 前者是待审核建议，后者是批准后的业务记录，生命周期与权限不同。
-4. **重复点击怎么处理？** 已确认返回原Task；事务+行锁+来源唯一约束共同防并发重复。
-5. **写任务失败会怎样？** 事务回滚，候选不留下confirmed而任务缺失的中间态；有注入失败测试。
-6. **旧页面确认如何处理？** 带revision，pending版本变化返回409；客户端刷新后重新审核。
-7. **会议中的小张没有账号？** 保留assignee_name，assignee_user_id为空；人工选择后绑定，不按同名自动匹配。
-8. **怎么解析“周五”？** 保留due_date_text；明确日期由人工设带时区due_date，不猜参考日期。
-9. **为何同步SQLAlchemy？** 当前流程和规模简单，同步Session容易解释；没有高并发指标，不提前异步重构。
-10. **迁移和create_all区别？** Alembic记录可审查的结构变更；应用启动不直接凭metadata创建表。
-11. **Session怎么释放？** 每请求dependency管理，异常rollback，退出close；外部LLM等待前释放事务。
-12. **上传安全做了什么？** 扩展名/MIME、UTF8、空内容、大小限制；不使用filename写路径，不永久保存原件。
-13. **为什么真实PostgreSQL测试？** 约束、锁、并发和pgvector行为不能由SQLite等价证明；随机独立库避免污染开发库。
-14. **如何避免越权RAG？** SQL过滤Creator/Owner后再排序LIMIT；引用读取再鉴权；分配Task不授予会议权限。
-15. **为什么选E5？** 多语言、384维、CPU可运行；固定ONNX版本，query/passage前缀与归一化遵循模型要求。
-16. **怎么切块？** Markdown优先段落/标题，会议按句界；380字符兜底、会议最多60重叠，保存字符范围。
-17. **为什么不用专门向量库？** PostgreSQL已是主库，小规模pgvector降低部署成本与权限联接复杂度。
-18. **用了HNSW吗？** 没有，当前小集精确cosine；需要规模数据和延迟目标后再决定索引及召回权衡。
-19. **引用正确能保证答案正确吗？** 不能。当前验证来源集合和quote原文，语义蕴含还需真实生成评估与人工抽查。
-20. **无答案如何拒答？** 无检索片段直接拒答；有片段时模型判断证据不足并返回no_answer，真实子集首轮2题通过1题，另一题空answer修复后单题通过，不能外推。
-21. **LangGraph为何有必要？** 用显式节点、条件边分开读取、LLM、检索、保存与人工边界，避免自由Agent控制数据库。
-22. **人工暂停用的interrupt吗？** 没有。pending存在SQL，抽取graph结束；后续确认请求执行独立graph，重启也可恢复业务。
-23. **Tool Calling由模型选工具吗？** 当前由确定性流程调用schema校验工具；未声称验证过供应商函数调用。
-24. **哪些错误重试？** 传输/timeout/429/5xx有限退避，合理处理Retry-After；401/403和结构错误不盲目重试。
-25. **如何记录成本？** 保存供应商返回的usage和延迟；无可靠价格时cost=null。成本取决于分窗token、重叠、重试和日处理量。
-26. **AliMeeting如何评分？** 以会议+句ID计算micro P/R/F1；证据映射原句；失败调用记空预测，不删除失败样本。
-27. **数据泄漏处理是否彻底？** 已隔离已知M3298/M8016，原包及规则hash可复现；不能宣称穷尽所有语义近重复。
-28. **AI写的代码如何证明理解？** 亲自演示重复确认、权限拒绝与数据库记录，沿真实函数解释事务和检索SQL；承认AI协作，不虚构个人代码比例。
+## 五个真实工程问题
+
+- OpenAI旧max_tokens参数HTTP400：改默认max_completion_tokens，真实回归验证。
+- RAG no_answer=true但answer为空：严格Schema拒绝，补充非空拒答提示，保留首轮失败。
+- 口语证据改写：空白恢复不足，修复为行号定位和原文重建；开发/最终集隔离。
+- ECS Docker Hub超时：本机官方来源构建amd64镜像，经SSH save/load，不用不明镜像站。
+- 大陆ECS至Provider连接超时：不能误判Key/额度；按明确Scope在Mac验证AI，ECS验证基础设施。
+
+## Deployment / Git
+
+中国大陆阿里云ECS：Ubuntu24.04、2vCPU/2GiB、2GiB持久Swap，Docker/Compose、FastAPI/PG+pgvector healthy、迁移0004_knowledge、卷持久化及容器/整机重启恢复均已验证。云端Generation不在部署Scope；AI真实Provider在Mac验证。Demo已按授权永久下线，Docker/SSH/Swap及服务器保留。
+
+真实GitHub分支/PR/CI/merge见GITHUB_WORKFLOW。云端删除前核对仅Demo，先保存证据；down保留卷、up恢复同一数据、down -v最终删卷；SSH/Docker/Swap仍保留。
+
+## 30个高频追问
+
+1. **为什么用API而不是自己训练？** 目标是应用交付与可解释的工作流；单一云Generation减少训练/算力负担，AliMeeting用于评测，QLoRA不在本轮。
+
+2. **为什么需要Pydantic？** JSON能解析不代表业务可用；strict类型、必需字段、extra=forbid和范围校验形成服务端契约。
+
+3. **Human-in-the-loop为什么存在？** 模型可能误读承诺或负责人；pending是建议，认证用户明确审核后才形成正式Task。
+
+4. **怎么防重复Task？** 同一事务更新候选并写任务，行锁串行化竞争，UNIQUE(source_action_item_id)作最后防线，重复确认返回同一Task。
+
+5. **创建Task失败会怎样？** 事务回滚，不留下confirmed但无Task；注入数据库失败测试覆盖该路径。
+
+6. **旧页面确认如何处理？** revision过期返回409，用户刷新重新审核；已确认的幂等重试返回原任务。
+
+7. **会议人物没有账号怎么办？** 保留assignee_name，assignee_user_id可空；人工绑定，不按同名自动推断系统用户。
+
+8. **明天下午如何转换日期？** 保留due_date_text，具体日历due_date由人工设定，模型不猜参考日期。
+
+9. **LangGraph为什么需要？** 明确读取、LLM、校验、可选检索、保存和人工边界的顺序，避免自由Agent自行写数据库。
+
+10. **用了原生interrupt吗？** 没有，pending保存在SQL；抽取Graph结束，人工确认请求运行独立Graph，进程重启后可恢复业务状态。
+
+11. **Tool Calling是模型选工具吗？** 不是。当前确定性流程调用Schema工具；写授权来自认证人工上下文，不接受模型提供human_approved。
+
+12. **RAG数据从哪来？** 12份原创虚构公司资料和用户授权历史会议；评测有3场Synthetic历史会议。AliMeeting不进入RAG索引。
+
+13. **为什么选pgvector？** 主库已有PostgreSQL，向量和权限可以同库联接，减少基础设施；当前小集精确cosine，不声称百万级性能。
+
+14. **Embedding怎么运行？** 固定revision的multilingual E5 ONNX int8，CPU、384维、query/passage前缀、mean pooling与L2归一化。
+
+15. **如何切块？** RAG文档按段落/标题、380字符兜底，会议按句界并有限重叠；抽取另用6000字符窗口/300重叠。
+
+16. **如何避免越权检索？** Creator/Owner过滤在SQL ORDER/LIMIT之前；引用回查再次鉴权，Task分配不自动授予整场会议权限。
+
+17. **Retrieval与Generation怎么区分故障？** 先查Gold来源是否进入TopK，再查答案/拒答/引用；检索成功不等于生成正确，分别报告指标。
+
+18. **Hit@K、Recall@K和MRR是什么？** Hit看至少一个相关来源命中，Recall看Gold来源覆盖比例，MRR看首个相关片段倒数排名；无答案题不进入这三个分母。
+
+19. **引用正确就一定答对吗？** 不一定。成员ID及原文quote校验只证明来源存在，语义蕴含仍需人工/独立评测。
+
+20. **No-answer测到了什么？** 全25题未做生成；历史6题子集的2个无答案首轮1个成功，空拒答修复后单题通过，不能合并称总体100%。
+
+21. **429怎么处理？** 有限指数退避，尊重Retry-After但单次等待封顶10秒；最多配置3次默认尝试。401/403/400不盲目重试。
+
+22. **timeout和重试如何影响评测？** 真实超时耗尽后整场失败，按空预测保留FN；HTTP请求数含重试，未知费用不写零成本。
+
+23. **为什么改成证据行号？** 真实口语文本的改写/换行让复制quote失败；模型选择起止行，服务器重建原文，越界拒绝。定位可靠仍不保证选中Gold行动句。
+
+24. **AliMeeting怎么对齐评分？** 连续证据精确匹配所有出现位置，映射所有重叠句ID；按(会议ID,句ID)集合计算TP/FP/FN，不能靠模糊人工评分。
+
+25. **AliMeeting Leakage怎么处理？** 已知Train M3298与Dev M8016近重复，派生排除Train项、保留Dev；原包不改。用于诊断的5场Test1也退出最终holdout。
+
+26. **为什么不报告负责人或deadline准确率？** 原始action_ids没有可靠字段级Gold；只做定性复核，不伪造标注。
+
+27. **服务器怎么部署，Volume如何保数据？** 受审main归档/官方镜像经SSH部署，Compose启动并迁移；PG数据在命名卷，restart/down不带-v后恢复均验证。down -v才永久删卷。
+
+28. **为什么大陆服务器没跑OpenAI？** 实测443连接超时。当前Scope用Mac做真实AI验证，ECS做Linux/Docker/PG/持久化/重启验收，不绕过地区限制、不新增Provider。
+
+29. **如果换Provider怎么改？** 已有客户端统一generate接口与env base URL/key/model，按兼容性设置token参数；更换必须真实验证，本次不增加新Provider。
+
+30. **Git流程和项目收尾是什么？** 真实分支→push→PR→CI→merge；保留历史，不伪造PR。部署证据保存后按授权下线Demo，服务器保留，功能冻结。

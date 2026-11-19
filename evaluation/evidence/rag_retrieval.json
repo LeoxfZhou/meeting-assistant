@@ -1,0 +1,21 @@
+{
+  "model": "Xenova/multilingual-e5-small@761b726dd34fb83930e26aab4e9ac3899aa1fa78:int8:mean:l2",
+  "questions": 25,
+  "answerable": 22,
+  "company_documents": 12,
+  "synthetic_meetings": 3,
+  "company_chunks": 12,
+  "k": 5,
+  "hit_at_k": 1.0,
+  "recall_at_k": 1.0,
+  "mrr": 0.893939393939394,
+  "citation_source_accuracy": null,
+  "no_answer_accuracy": null,
+  "answer_evaluation": "not_run_retrieval_only",
+  "questions_sha256": "fa7451e6ebe253fe412a77f923e8b8b3a868c41d3f869098603d4914783ab9f1",
+  "limitations": [
+    "Small self-authored synthetic benchmark; not independent production validation.",
+    "No-answer retrieval alone is not answer refusal accuracy.",
+    "Exact citation checks do not prove semantic entailment."
+  ]
+}

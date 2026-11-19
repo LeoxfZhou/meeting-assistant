@@ -1,8 +1,8 @@
-> 2026-11-19 更新：真实云基础部署、迁移、CPU检索、容器及整机重启已验证；云端LLM因Provider网络连接超时尚未完成。下方原本地验收/待部署描述为历史快照，以文末云验收记录为准。
+> 当前范围：功能冻结与评测封版；云端基础设施已验证，云端 Generation 不属于部署验收范围。
 
-# CPU Linux 部署交接（尚未部署到云服务器）
+# CPU Linux 部署与下线证据
 
-本地 Compose 验证与真实云部署是两件事。当前不声称已有服务器、域名或线上用户。
+已在中国大陆阿里云 ECS 完成基础部署；没有商业线上用户、域名或HTTPS。以下准备流程为历史可复现说明，真实证据在后文。
 
 ## 人工准备
 
@@ -51,6 +51,20 @@ Compose云覆盖：API900MiB、PG450MiB，PG shared_buffers64MB/max_connections3
 
 boot ID从b5801c58-0b2b-472b-aba6-7505d6193958变为a434b186-f13c-41f6-942a-7143b5e3f826；Docker enabled，API/PG自动healthy，2GiB Swap恢复。同一合成会议022a2ba1-d0f3-4401-a24a-ff62cb3d8bfe重启后读取和CPU向量检索通过。未重建或清空命名数据库卷。
 
-部署主机仅SSH公开，应用/DB绑定127.0.0.1。访问方式：`ssh -N -L 18081:127.0.0.1:8000 xyhleo-server`，浏览器打开http://127.0.0.1:18081。云资源已真实部署，但服务器LLM尚未完成：无凭据curl直连api.openai.com:443重复超时（8秒连接上限），不能判断为Key错误。用户需确定服务器可用的合规Provider连接方式，再在服务器/opt/meeting-assistant/.env设置三项LLM变量；不在聊天提交密钥。没有将本机Key复制到服务器或绕过服务访问限制。
+部署主机仅SSH公开，应用/DB绑定127.0.0.1。访问方式：`ssh -N -L 18081:127.0.0.1:8000 xyhleo-server`，浏览器打开http://127.0.0.1:18081。云端基础设施验收已完成。大陆ECS连接api.openai.com:443曾超时，但云端Generation现已明确排除在部署Scope之外，不再等待Provider配置；真实AI验证在开发环境完成。没有传输本机Key或绕过访问限制。
 
 当前源代码部署来自已验证Git main归档，不是服务器持有GitHub凭据直接clone。更新需重新传输受审提交/镜像；没有伪造远程clone。compose.cloud.yml记录实际低内存参数。合成验证账户/会议保留用于重启证据，凭据仅服务器/root/.meeting-probe.json（600），不进Git。
+
+## 下线前新增验收（2026-11-19）
+
+再次核对API/PG healthy，40GiB盘已用7.7GiB，2GiB Swap存在。数据库只有1个合成探针用户、1场Synthetic server persistence probe会议、0候选/Task/企业文档，无唯一业务数据。服务器.env无需保留，用户已授权永久删除Demo。
+
+实际执行compose down（不带-v）：API/PG容器和项目网络删除，但meeting-assistant_postgres_data仍存在。随后up --no-build --pull never --wait，两服务healthy；同一会议ID读取及CPU向量检索通过。原始终端记录位于忽略的outputs/checks/cloud_down_up.log。永久清理已在下面单独验收。
+
+## 授权永久下线已完成（2026-11-19）
+
+先将部署证据提交0d91cff并push到Private GitHub，然后再次断言数据库恰为1个合成用户、1场既有探针会议、0任务/候选。确认路径不是符号链接后执行指定Compose down -v；仅删除项目容器、network、meeting-assistant_postgres_data、/opt/meeting-assistant（含.env和模型副本）、/root/meeting_probe.py和/root/.meeting-probe.json。没有删除其他项目或执行全局prune。
+
+下线后断言项目容器/网络/卷/目录/探针均不存在；全新SSH会话登录成功，Docker29.1.3仍可用且enabled，Compose2.40.3和2147479552-byte Swap保留，authorized_keys仍在。Ubuntu/SSH/Git/系统软件未卸载。磁盘快照已用8193327104→7979843584 bytes，释放约203.6MiB；保留缓存镜像，不声称清空整个Docker。内存已用约1009→469MiB，仅快照对比。
+
+本项目Demo是有意下线，服务器保留为xyhleo personal server，不删除ECS、不重装系统。以后需要演示请在本机启动；原SSH Tunnel端口不再提供Meeting Assistant服务。公开证据：evaluation/evidence/cloud_validation.json。原始清理终端记录保留本地outputs/checks/cloud_cleanup.log。

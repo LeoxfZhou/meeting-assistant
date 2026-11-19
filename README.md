@@ -1,15 +1,49 @@
 # Meeting Action Assistant / 中文会议行动助手
 
-一个面向单公司、多用户的 **LLM Application / AI Backend / RAG / Workflow** 求职演示项目：会议文本 → 结构化候选 → 人工确认 → 正式任务，并支持带权限的企业知识和历史会议检索。QLoRA/GPU 训练不在主线。
+把会议中的安排变成**可审核、可追踪的任务**：Meeting Text → AI Extraction → Human Review → Task，并支持企业资料与授权历史会议的 RAG。FastAPI / PostgreSQL / LLM Application 求职项目，非商业生产系统。
 
-## 真实状态
+**Feature frozen / Interview demo**。真实Provider在开发Mac验证；大陆阿里云ECS已完成基础设施部署验收并主动下线。当前抽取效果仍有明显改进空间，以下给出真实小样本结果。
 
-已实现 Auth/JWT、Meeting CRUD/TXT/MD、云 LLM Client、Candidate Review、幂等 Task/My Tasks、CPU multilingual embedding + pgvector、LangGraph 受控流程、评估脚本、FastAPI/PostgreSQL Compose 和轻量演示页面。
+## Architecture
 
-- 73 项 pytest 通过，全部数据库集成使用真实 PostgreSQL；不是 SQLite 替代。
-- 真实 CPU 检索：25 题合成集（22 有答案），Hit@5=1.0、Recall@5=1.0、MRR=0.893939。规模小且自编，不代表真实企业效果。
-- **已完成 gpt-6-luna 小样本真实验证**：5类合成抽取通过，API确认到Task和Docker真实出站通过。RAG首轮5/6通过，1个空拒答失败修复后单题复测通过；不能当作全量准确率。详见 [真实验证](docs/REAL_PROVIDER_VERIFICATION.md)。
-- Compose 已真实运行及重启验证；尚未部署云服务器；Private GitHub 仓库已连接，首次远程CI通过（73 tests）。
+```mermaid
+flowchart LR
+  U[TXT / Markdown / Text] --> A[FastAPI + JWT]
+  A --> M[(PostgreSQL Meetings)]
+  M --> W[LangGraph controlled workflow]
+  W --> L[Cloud LLM + Pydantic]
+  L --> C[Pending Candidates]
+  C --> H[Human Edit / Confirm / Reject]
+  H --> T[Transaction + UNIQUE Task]
+  D[Company Docs + Authorized Meetings] --> E[CPU E5 Embedding]
+  E --> V[(pgvector)]
+  Q[Question] --> V
+  V --> R[Retrieved Context + LLM]
+  R --> S[Answer + Verified Citations]
+```
+
+## Core features
+
+- FastAPI、SQLAlchemy2、Alembic，TXT/MD上传、JWT/Argon2与Creator/Owner权限。
+- 长会议分段；Pydantic结构化输出；模型返回行号，由服务端重建原文证据。
+- 人工编辑/确认/拒绝；revision防过期操作，事务、行锁与唯一来源约束防重复任务。
+- LangGraph受控流程与确定性工具调用；审核状态持久化于SQL，不是自由Multi-Agent。
+- CPU multilingual E5 + pgvector；权限过滤在Top-K之前，引用支持回查。
+- 有限重试、超时、429/5xx分类、request_id、脱敏日志与token记录。
+- 真实PostgreSQL测试、数据泄漏处理、评测、Docker/Linux部署及下线证据。
+
+## Real evidence
+
+| Evidence | Measured result | Artifact |
+|---|---|---|
+| Tests | 82 passed，真实PG/CPU，外部错误路径Mock | [测试](tests/) / GitHub Actions |
+| AliMeeting audit | 442场 / 302332句 / 1472 Action IDs / 109空标签 | [公开摘要](evaluation/evidence/data_audit_public.md) |
+| Action extraction | 30场未用于调试的Test1；micro P=0.0479、R=0.4366、F1=0.0864（TP=31 / FP=616 / FN=40） | [指标与对齐规则](evaluation/evidence/action_item_evaluation.md) |
+| Synthetic retrieval | 22有答案题 Hit@5=1、Recall@5=1、MRR≈0.894 | [25题报告](evaluation/evidence/rag_retrieval.json) |
+| Synthetic generation | 历史6题首轮5/6；无答案1/2；修复后单题通过 | [原始口径](evaluation/evidence/synthetic_provider_round1.json) |
+| Deployment lifecycle | ECS部署、卷持久化、容器/整机重启、down/up、授权down -v | [部署与下线](docs/DEPLOYMENT.md) |
+
+不使用“RAG accuracy=100%”。检索覆盖和生成正确性是不同指标；没有全25题生成准确率或真实成本收益主张。
 
 ## 快速启动
 
@@ -98,30 +132,34 @@ AliMeeting 仅用于抽取评估，**不会被企业资料 ingestion 或历史�
 
 ```sh
 uv run pytest -q
+uv run python -m scripts.evaluate_rag --output outputs/evaluations/rag_reproduction
 uv run python -m scripts.clean_split
-uv run python -m scripts.evaluate_extraction --mode empty-baseline --split Dev --output outputs/evaluations/extraction_empty_baseline
-uv run python -m scripts.evaluate_rag
+uv run python -m scripts.finalize_evaluation --stage select
+# 以下两步会调用付费Provider，先检查本地.env和预算；已有结果会按会议跳过，保留失败。
+uv run python -m scripts.finalize_evaluation --stage smoke
+uv run python -m scripts.finalize_evaluation --stage final
+# 已有完整本地预测时离线复算，不调用Provider：
+uv run python -m scripts.report_final_evaluation
 ```
 
-pytest 和 RAG evaluation 在本机开发 PostgreSQL 中创建随机独立数据库，迁移后运行，结束清理；不清空开发库。需要 CREATEDB 权限，拒绝 production/远端连接。向量模型必须先下载；缺模型会真实失败，不跳过后宣称通过。
+真实PG测试/RAG评估创建随机独立本机数据库并在结束后删除，不清空开发库。测试需要CREATEDB权限、固定CPU模型和可运行的Docker。CI不使用真实Provider Key。
 
-clean split 排除 Train M3298，保留 Dev M8016，记录原包 hash 和规则，只写 `data/processed/`。全空预测基线是评分工具基线，**不是 LLM 成绩**。真实 Provider 评估需 Key、模型与调用预算批准后再运行：
+最终30场来自Test1；先前用于修复的5场被排除，Train仅用于Smoke。每个密度/长度层5场，seed=20261119；失败算空预测。原文预测/坏例/HTTP观测保留ignored outputs/evaluations；公开目录evaluation/evidence仅有无原文统计、ID、哈希。首次诊断、修复验证与最终评测用量分开，见run_accounting.json。完整复现需自行合法取得相同数据包；随机模型输出不保证逐字相同。
 
-```sh
-uv run python -m scripts.evaluate_extraction --mode provider --split Dev --limit 5 --output outputs/evaluations/extraction_provider_smoke
-uv run python -m scripts.evaluate_rag --with-llm --output outputs/evaluations/rag_provider
-```
+## Dataset / publication
 
-结果写 outputs/evaluations，失败案例保留。任务字段无 AliMeeting Gold，不填 assignee/deadline Accuracy。检索评估有 3 道无答案题，未运行 LLM 时拒答准确率保持 null。
+AliMeeting raw ZIP、原文审计、完整预测/坏例不随仓库分发；原始数据未修改。已知Train M3298 / Dev M8016近重复通过派生manifest排除Train项，其他语义重复未穷尽。12份公司资料和3场RAG会议为原创Synthetic/Fictional。
 
-`python -m scripts.smoke_compose` 会对本机 Compose 创建临时合成用户/会议、索引、插入明确标记的候选 fixture、确认/重复确认并重启容器验证持久化，结束清理本次数据；不是模型效果评估，不应在生产执行。
+Dataset redistribution license requires manual verification before repository is made public.
+仓库保持Private；公开前需人工核实数据来源/许可、个人元数据与代码许可证。历史Secret扫描只是辅助防线，不是绝对保证。
 
-## Git / 数据 / 部署
+## Limitations / feature freeze
 
-已从本地分支流程进入 Private GitHub 的 branch → push → PR → CI → merge 流程；过去本地开发没有补造PR。真实证据见 [GitHub工作流](docs/GITHUB_WORKFLOW.md)。公开前运行 `uv run python -m scripts.audit_public_repo` 审查 index/history。此扫描不是完美的 Secret 保证，仍需人工许可与个人信息审查。
+- 小规模真实LLM评测；误报明显，不声称生产级抽取效果。
+- AliMeeting没有可靠的assignee/deadline/task字段Gold，不报告字段准确率。
+- Synthetic RAG自编小集不是独立真实企业基准；引用存在不等于语义完全支持。
+- 大陆ECS没有验证云端LLM Generation，这是部署Scope；真实AI调用在Mac完成。
+- Demo无生产级限流、邮箱验证、刷新令牌/找回密码；仅本机或受控SSH Tunnel环境。
+- 不含ASR/TTS/QLoRA/Multi-Agent，不新增Provider、Nginx/HTTPS或其他功能。后续只接受Bug/Security/Documentation Fix。
 
-`.env`、raw/processed/annotations、所有 outputs（包括含 Train 原文的审计报告）、models、数据库文件、虚拟环境与私钥都不进入 Git。原始审计资产保留。数据来源/许可仍待确认，见 [data/README.md](data/README.md)。
-
-Compose 默认只绑定本机，使用持久卷。`stop` 保留数据，勿用 `down -v` 清空。云服务器尚未购买/登录/部署；见 [部署交接](docs/DEPLOYMENT.md)。
-
-当前证据：[PROJECT_STATE](docs/PROJECT_STATE.md) · [教学 Walkthrough](docs/PROJECT_WALKTHROUGH.md) · [面试速查](docs/INTERVIEW_CHEATSHEET.md) · [简历证据](docs/RESUME_EVIDENCE.md) · [真实问题](docs/issues_and_fixes.md)。历史 `docs/project-plan/` 已被当前 MASTER_GOAL 替代。
+[教学Walkthrough](docs/PROJECT_WALKTHROUGH.md) · [面试速查](docs/INTERVIEW_CHEATSHEET.md) · [简历证据](docs/RESUME_EVIDENCE.md) · [当前状态](docs/PROJECT_STATE.md) · [真实问题](docs/issues_and_fixes.md)

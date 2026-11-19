@@ -71,7 +71,7 @@ def main():
             'mrr':sum(r['mrr'] for r in answerable)/len(answerable),
             'citation_source_accuracy':sum(r['source_precision'] for r in rows)/len(rows) if args.with_llm else None,
             'no_answer_accuracy':sum(r['no_answer_correct'] for r in rows if not r['expected_sources'])/sum(not r['expected_sources'] for r in rows) if args.with_llm else None,
-            'answer_evaluation':'real_provider' if args.with_llm else 'not_run_requires_key',
+            'answer_evaluation':'real_provider' if args.with_llm else 'not_run_retrieval_only',
             'questions_sha256':hashlib.sha256(Path('evaluation/rag_questions.jsonl').read_bytes()).hexdigest(),
             'limitations':['Small self-authored synthetic benchmark; not independent production validation.',
                           'No-answer retrieval alone is not answer refusal accuracy.','Exact citation checks do not prove semantic entailment.']}
